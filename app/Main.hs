@@ -17,7 +17,8 @@ app = component_ $ do
 
 main :: IO ()
 main = do
-  (_, vdom) <- buildHtml app mkVirtualDom
+  (ms, vdom) <- buildHtml app mkVirtualDom
+  print ms
   print vdom
 
   let button = fromMaybe (error "TODO") $ find "button" (root vdom)

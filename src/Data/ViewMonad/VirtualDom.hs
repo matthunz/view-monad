@@ -11,6 +11,7 @@ module Data.ViewMonad.VirtualDom
     Mutation (..),
     mkVirtualDom,
     buildHtml,
+    buildHtml',
     rebuildHtml,
     handle,
     handle',
@@ -72,36 +73,45 @@ data VirtualDom m = VirtualDom
 mkVirtualDom :: VirtualDom m
 mkVirtualDom = VirtualDom 0 mempty
 
-buildHtml :: (Monad m) => Html m -> VirtualDom m -> m (Int, VirtualDom m)
+data Mutation
+  = InsertElement Int Int String
+  | InsertText Int Int String
+  | SetText Int String
+  deriving (Eq, Show)
+
+-- | Build the root HTML.
+buildHtml :: (Monad m) => Html m -> VirtualDom m -> m ([Mutation], VirtualDom m)
 buildHtml html vdom = do
+  (mutations, _, vdom') <- buildHtml' html 0 vdom
+  return (mutations, vdom')
+
+buildHtml' :: (Monad m) => Html m -> Int -> VirtualDom m -> m ([Mutation], Int, VirtualDom m)
+buildHtml' html parentId vdom = do
   let i = _nextId vdom
       vdom' = vdom {_nextId = _nextId vdom + 1}
-  (node, vdom'') <- case html of
+  (mutations, node, vdom'') <- case html of
     HtmlComponent content -> do
       (contentHtml, _, hooks) <- runComponent content i 0 []
-      (contentId, vdom2) <- buildHtml contentHtml vdom'
-      return (ComponentNode content hooks contentId, vdom2)
+      (ms, contentId, vdom2) <- buildHtml' contentHtml i vdom'
+      return (ms, ComponentNode content hooks contentId, vdom2)
     Fragment content -> do
-      (contentIds, vdom2) <- buildChildren content vdom'
-      return (FragmentNode contentIds, vdom2)
+      (ms, contentIds, vdom2) <- buildChildren content i vdom'
+      return (ms, FragmentNode contentIds, vdom2)
     Element tag attrs content -> do
-      (contentIds, vdom2) <- buildChildren content vdom'
-      return (ElementNode tag attrs contentIds, vdom2)
-    Text s -> pure (TextNode s, vdom')
-  return (i, vdom'' {_tree = insert i node (_tree vdom'')})
+      (ms, contentIds, vdom2) <- buildChildren content i vdom'
+      return (InsertElement parentId i tag : ms, ElementNode tag attrs contentIds, vdom2)
+    Text s -> pure ([InsertText parentId i s], TextNode s, vdom')
+  return (mutations, i, vdom'' {_tree = insert i node (_tree vdom'')})
 
-buildChildren :: (Foldable t, Monad m) => t (Html m) -> VirtualDom m -> m ([Int], VirtualDom m)
-buildChildren content vdom =
+buildChildren :: (Foldable t, Monad m) => t (Html m) -> Int -> VirtualDom m -> m ([Mutation], [Int], VirtualDom m)
+buildChildren content parentId vdom =
   foldM
-    ( \(idAcc, vdomAcc) c -> do
-        (i, vdomAcc') <- buildHtml c vdomAcc
-        return (idAcc ++ [i], vdomAcc')
+    ( \(mAcc, idAcc, vdomAcc) c -> do
+        (ms, i, vdomAcc') <- buildHtml' c parentId vdomAcc
+        return (mAcc ++ ms, idAcc ++ [i], vdomAcc')
     )
-    ([], vdom)
+    ([], [], vdom)
     content
-
-data Mutation = SetText Int String
-  deriving (Eq, Show)
 
 rebuildHtml :: (Monad m) => Int -> VirtualDom m -> m ([Mutation], VirtualDom m)
 rebuildHtml i vdom = case _tree vdom ! i of
