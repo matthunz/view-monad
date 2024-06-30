@@ -4,6 +4,9 @@ module ViewMonad
   ( Node (..),
     Tree,
     Html (..),
+    component_,
+    element_,
+    text_,
     Component,
     useHook,
     useState,
@@ -15,12 +18,21 @@ module ViewMonad
 where
 
 import Control.Monad (ap)
-import Data.Dynamic (Dynamic, Typeable, fromDyn, fromDynamic, toDyn)
+import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.IntMap (IntMap, insert, (!))
 import Data.Maybe (fromMaybe)
 
 data Html = HtmlComponent (Component Html) | Fragment [Html] | Element String [Html] | Text String
   deriving (Show)
+
+component_ :: Component Html -> Html
+component_ = HtmlComponent
+
+element_ :: String -> [Html] -> Html
+element_ = Element
+
+text_ :: String -> Html
+text_ = Text
 
 data Node
   = ComponentNode (Component Html) [Dynamic] Int
@@ -125,11 +137,28 @@ rebuildHtml i vdom = case _tree vdom ! i of
     let contentNode = _tree vdom ! contentId
         (contentHtml, _, hooks') = runComponent content i 0 hooks
         vdom' = vdom {_tree = insert i (ComponentNode content hooks' contentId) (_tree vdom)}
-     in case contentHtml of
-          Text s -> case contentNode of
-            TextNode lastS -> ([SetText contentId s | s /= lastS], vdom')
-            _ -> error ""
-          _ -> error ""
+     in rebuildHtml' contentId contentHtml contentNode vdom'
+  _ -> error ""
+
+rebuildHtml' :: Int -> Html -> Node -> VirtualDom -> ([Mutation], VirtualDom)
+rebuildHtml' i html node vdom = case html of
+  Text s -> case node of
+    TextNode lastS -> ([SetText i s | s /= lastS], vdom)
+    _ -> error ""
+  Element tag elemContent -> case node of
+    ElementNode lastTag childIds ->
+      if tag == lastTag
+        then
+          foldr
+            ( \(childId, childHtml) (acc, accVdom) ->
+                let childNode = _tree accVdom ! childId
+                    (ms, accVdom') = rebuildHtml' childId childHtml childNode accVdom
+                 in (acc ++ ms, accVdom')
+            )
+            ([], vdom)
+            (zip childIds elemContent)
+        else error ""
+    _ -> error ""
   _ -> error ""
 
 replaceAt :: Int -> a -> [a] -> [a]
