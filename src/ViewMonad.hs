@@ -1,11 +1,25 @@
-module ViewMonad (Node (..), Tree, Html (..), VirtualDom, mkVirtualDom, buildHtml) where
+{-# LANGUAGE DeriveFunctor #-}
 
-import Data.IntMap (IntMap, insert)
+module ViewMonad
+  ( Node (..),
+    Tree,
+    Html (..),
+    VirtualDom,
+    mkVirtualDom,
+    buildHtml,
+    rebuildHtml,
+  )
+where
 
-data Html = Component Html | Fragment [Html] | Element String [Html] | Text String
+import Control.Monad (ap)
+import Data.Dynamic (Dynamic)
+import Data.IntMap (IntMap, insert, (!))
+
+data Html = HtmlComponent (Component Html) | Fragment [Html] | Element String [Html] | Text String
+  deriving (Show)
 
 data Node
-  = ComponentNode Int
+  = ComponentNode (Component Html) [Dynamic] Int
   | FragmentNode [Int]
   | ElementNode String [Int]
   | TextNode String
@@ -27,9 +41,10 @@ buildHtml html vdom =
   let i = _nextId vdom
       vdom' = vdom {_nextId = _nextId vdom + 1}
       (node, vdom'') = case html of
-        Component content ->
-          let (contentId, vdom2) = buildHtml content vdom'
-           in (ComponentNode contentId, vdom2)
+        HtmlComponent content ->
+          let (contentHtml, _, hooks) = runComponent content i 0 []
+              (contentId, vdom2) = buildHtml contentHtml vdom'
+           in (ComponentNode content hooks contentId, vdom2)
         Fragment content ->
           let (contentIds, vdom2) = buildChildren content vdom'
            in (FragmentNode contentIds, vdom2)
@@ -48,3 +63,40 @@ buildChildren content vdom =
     )
     ([], vdom)
     content
+
+newtype Component a = Component
+  { runComponent :: Int -> Int -> [Dynamic] -> (a, Int, [Dynamic])
+  }
+  deriving (Functor)
+
+instance Show (Component a) where
+  show _ = "Component"
+
+instance Applicative Component where
+  pure a = Component (\_ i hooks -> (a, i, hooks))
+  (<*>) = ap
+
+instance Monad Component where
+  (>>=) a f =
+    Component
+      ( \i idx hooks ->
+          let (a', idx', hooks') = runComponent a i idx hooks
+              (b, idx'', hooks'') = runComponent (f a') i idx' hooks'
+           in (b, idx'', hooks'')
+      )
+
+data Mutation = SetText Int String
+  deriving (Show)
+
+rebuildHtml :: Int -> VirtualDom -> ([Mutation], VirtualDom)
+rebuildHtml i vdom = case _tree vdom ! i of
+  ComponentNode content hooks contentId ->
+    let contentNode = _tree vdom ! contentId
+        (contentHtml, _, hooks') = runComponent content i 0 hooks
+        vdom' = vdom {_tree = insert i (ComponentNode content hooks' contentId) (_tree vdom)}
+     in case contentHtml of
+          Text s -> case contentNode of
+            TextNode lastS -> ([SetText contentId s | s /= lastS], vdom')
+            _ -> error ""
+          _ -> error ""
+  _ -> error ""
