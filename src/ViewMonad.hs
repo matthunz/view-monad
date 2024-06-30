@@ -1,26 +1,50 @@
-module ViewMonad (Node (..), Tree, foldTree) where
+module ViewMonad (Node (..), Tree, Html (..), VirtualDom, mkVirtualDom, buildHtml) where
 
-import Data.IntMap (IntMap, (!?))
+import Data.IntMap (IntMap, insert)
+
+data Html = Component Html | Fragment [Html] | Element String [Html] | Text String
 
 data Node
-  = Component Int
-  | Fragment [Int]
-  | Element String [Int]
-  | Text String
+  = ComponentNode Int
+  | FragmentNode [Int]
+  | ElementNode String [Int]
+  | TextNode String
+  deriving (Show)
 
 type Tree = IntMap Node
 
-foldTree :: (Int -> Node -> a -> a) -> a -> Int -> Tree -> a
-foldTree f acc idx tree = case tree !? idx of
-  Just x -> case x of
-    Component i ->
-      let acc' = foldTree f (f idx (Component i) acc) idx tree
-       in foldTree f acc' i tree
-    Fragment is ->
-      let acc' = foldTree f (f idx (Fragment is) acc) idx tree
-       in foldr (\i acc'' -> foldTree f acc'' i tree) acc' is
-    Element name is ->
-      let acc' = foldTree f (f idx (Element name is) acc) idx tree
-       in foldr (\i acc'' -> foldTree f acc'' i tree) acc' is
-    Text s -> f idx (Text s) acc
-  Nothing -> acc
+data VirtualDom = VirtualDom
+  { _nextId :: Int,
+    _tree :: Tree
+  }
+  deriving (Show)
+
+mkVirtualDom :: VirtualDom
+mkVirtualDom = VirtualDom 0 mempty
+
+buildHtml :: Html -> VirtualDom -> (Int, VirtualDom)
+buildHtml html vdom =
+  let i = _nextId vdom
+      vdom' = vdom {_nextId = _nextId vdom + 1}
+      (node, vdom'') = case html of
+        Component content ->
+          let (contentId, vdom2) = buildHtml content vdom'
+           in (ComponentNode contentId, vdom2)
+        Fragment content ->
+          let (contentIds, vdom2) = buildChildren content vdom'
+           in (FragmentNode contentIds, vdom2)
+        Element tag content ->
+          let (contentIds, vdom2) = buildChildren content vdom'
+           in (ElementNode tag contentIds, vdom2)
+        Text s -> (TextNode s, vdom')
+   in (i, vdom'' {_tree = insert i node (_tree vdom'')})
+
+buildChildren :: (Foldable t) => t Html -> VirtualDom -> ([Int], VirtualDom)
+buildChildren content vdom =
+  foldr
+    ( \c (idAcc, vdomAcc) ->
+        let (i, vdomAcc') = buildHtml c vdomAcc
+         in (idAcc ++ [i], vdomAcc')
+    )
+    ([], vdom)
+    content
