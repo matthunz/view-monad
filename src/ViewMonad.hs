@@ -10,6 +10,8 @@ module ViewMonad
     component_,
     element_,
     text_,
+    div_,
+    button_,
     Component,
     useHook,
     useState,
@@ -69,6 +71,12 @@ component_ = HtmlComponent
 element_ :: String -> [HtmlAttribute] -> [Html] -> Html
 element_ = Element
 
+div_ :: [HtmlAttribute] -> [Html] -> Html
+div_ = element_ "div"
+
+button_ :: [HtmlAttribute] -> [Html] -> Html
+button_ = element_ "button"
+
 text_ :: String -> Html
 text_ = Text
 
@@ -113,7 +121,7 @@ buildChildren content vdom =
   foldr
     ( \c (idAcc, vdomAcc) ->
         let (i, vdomAcc') = buildHtml c vdomAcc
-         in (idAcc ++ [i], vdomAcc')
+         in (i : idAcc, vdomAcc')
     )
     ([], vdom)
     content
@@ -156,12 +164,7 @@ useState :: (Typeable a) => a -> Component (a, a -> Scope ())
 useState s =
   ( \(State i idx s') ->
       ( s',
-        \new ->
-          Scope
-            ( \_ _ ->
-                -- let x = replaceAt idx (toDyn (State i idx new)) hooks
-                ((), [Update i idx (toDyn (State i idx new))])
-            )
+        \new -> Scope (\_ _ -> ((), [Update i idx (toDyn (State i idx new))]))
       )
   )
     <$> useHook (\i idx -> State i idx s)
@@ -187,14 +190,16 @@ rebuildHtml' i html node vdom = case html of
     ElementNode lastTag lastAttrs childIds ->
       if tag == lastTag
         then
-          foldr
-            ( \(childId, childHtml) (acc, accVdom) ->
-                let childNode = _tree accVdom ! childId
-                    (ms, accVdom') = rebuildHtml' childId childHtml childNode accVdom
-                 in (acc ++ ms, accVdom')
-            )
-            ([], vdom)
-            (zip childIds elemContent)
+          let (mutations, vdom') =
+                foldr
+                  ( \(childId, childHtml) (acc, accVdom) ->
+                      let childNode = _tree accVdom ! childId
+                          (ms, accVdom') = rebuildHtml' childId childHtml childNode accVdom
+                       in (acc ++ ms, accVdom')
+                  )
+                  ([], vdom)
+                  (zip childIds elemContent)
+           in (mutations, vdom' {_tree = insert i (ElementNode tag attrs childIds) (_tree vdom')})
         else error ""
     _ -> error ""
   _ -> error ""
