@@ -23,6 +23,7 @@ module Data.ViewMonad.VirtualDom
   )
 where
 
+import Control.Monad (foldM)
 import Data.Dynamic (Dynamic)
 import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
@@ -31,16 +32,16 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.ViewMonad
 import Data.ViewMonad.Html
 
-data Node
-  = ComponentNode !(Component Html) ![Dynamic] !Int
+data Node m
+  = ComponentNode !(Component m (Html m)) ![Dynamic] !Int
   | FragmentNode ![Int]
   | ElementNode !String ![HtmlAttribute] ![Int]
   | TextNode !String
   deriving (Show)
 
-type Tree = IntMap Node
+type Tree m = IntMap (Node m)
 
-foldTree' :: (Int -> Node -> a -> a) -> a -> Int -> Tree -> a
+foldTree' :: (Int -> Node m -> a -> a) -> a -> Int -> Tree m -> a
 foldTree' f acc i tree =
   let node = tree ! i
       acc' = f i node acc
@@ -62,39 +63,39 @@ foldTree' f acc i tree =
             childIds
         TextNode _ -> acc'
 
-data VirtualDom = VirtualDom
+data VirtualDom m = VirtualDom
   { _nextId :: !Int,
-    _tree :: !Tree
+    _tree :: !(Tree m)
   }
   deriving (Show)
 
-mkVirtualDom :: VirtualDom
+mkVirtualDom :: VirtualDom m
 mkVirtualDom = VirtualDom 0 mempty
 
-buildHtml :: Html -> VirtualDom -> (Int, VirtualDom)
-buildHtml html vdom =
+buildHtml :: (Monad m) => Html m -> VirtualDom m -> m (Int, VirtualDom m)
+buildHtml html vdom = do
   let i = _nextId vdom
       vdom' = vdom {_nextId = _nextId vdom + 1}
-      (node, vdom'') = case html of
-        HtmlComponent content ->
-          let (contentHtml, _, hooks) = runComponent content i 0 []
-              (contentId, vdom2) = buildHtml contentHtml vdom'
-           in (ComponentNode content hooks contentId, vdom2)
-        Fragment content ->
-          let (contentIds, vdom2) = buildChildren content vdom'
-           in (FragmentNode contentIds, vdom2)
-        Element tag attrs content ->
-          let (contentIds, vdom2) = buildChildren content vdom'
-           in (ElementNode tag attrs contentIds, vdom2)
-        Text s -> (TextNode s, vdom')
-   in (i, vdom'' {_tree = insert i node (_tree vdom'')})
+  (node, vdom'') <- case html of
+    HtmlComponent content -> do
+      (contentHtml, _, hooks) <- runComponent content i 0 []
+      (contentId, vdom2) <- buildHtml contentHtml vdom'
+      return (ComponentNode content hooks contentId, vdom2)
+    Fragment content -> do
+      (contentIds, vdom2) <- buildChildren content vdom'
+      return (FragmentNode contentIds, vdom2)
+    Element tag attrs content -> do
+      (contentIds, vdom2) <- buildChildren content vdom'
+      return (ElementNode tag attrs contentIds, vdom2)
+    Text s -> pure (TextNode s, vdom')
+  return (i, vdom'' {_tree = insert i node (_tree vdom'')})
 
-buildChildren :: (Foldable t) => t Html -> VirtualDom -> ([Int], VirtualDom)
+buildChildren :: (Foldable t, Monad m) => t (Html m) -> VirtualDom m -> m ([Int], VirtualDom m)
 buildChildren content vdom =
-  foldr'
-    ( \c (idAcc, vdomAcc) ->
-        let (i, vdomAcc') = buildHtml c vdomAcc
-         in (i : idAcc, vdomAcc')
+  foldM
+    ( \(idAcc, vdomAcc) c -> do
+        (i, vdomAcc') <- buildHtml c vdomAcc
+        return (idAcc ++ [i], vdomAcc')
     )
     ([], vdom)
     content
@@ -102,16 +103,16 @@ buildChildren content vdom =
 data Mutation = SetText Int String
   deriving (Eq, Show)
 
-rebuildHtml :: Int -> VirtualDom -> ([Mutation], VirtualDom)
+rebuildHtml :: (Monad m) => Int -> VirtualDom m -> m ([Mutation], VirtualDom m)
 rebuildHtml i vdom = case _tree vdom ! i of
-  ComponentNode content hooks contentId ->
+  ComponentNode content hooks contentId -> do
     let contentNode = _tree vdom ! contentId
-        (contentHtml, _, hooks') = runComponent content i 0 hooks
-        vdom' = vdom {_tree = insert i (ComponentNode content hooks' contentId) (_tree vdom)}
-     in rebuildHtml' contentId contentHtml contentNode vdom'
+    (contentHtml, _, hooks') <- runComponent content i 0 hooks
+    let vdom' = vdom {_tree = insert i (ComponentNode content hooks' contentId) (_tree vdom)}
+    return $ rebuildHtml' contentId contentHtml contentNode vdom'
   _ -> error ""
 
-rebuildHtml' :: Int -> Html -> Node -> VirtualDom -> ([Mutation], VirtualDom)
+rebuildHtml' :: Int -> Html m -> Node m -> VirtualDom m -> ([Mutation], VirtualDom m)
 rebuildHtml' i html node vdom = case html of
   Text s -> case node of
     TextNode lastS -> ([SetText i s | s /= lastS], vdom)
@@ -135,10 +136,10 @@ rebuildHtml' i html node vdom = case html of
     _ -> error ""
   _ -> error ""
 
-handle :: Int -> String -> VirtualDom -> VirtualDom
+handle :: Int -> String -> VirtualDom m -> VirtualDom m
 handle i event vdom = foldr' update vdom (handle' i event vdom)
 
-handle' :: Int -> [Char] -> VirtualDom -> [Update]
+handle' :: Int -> [Char] -> VirtualDom m -> [Update]
 handle' i event vdom = case _tree vdom ! i of
   ElementNode _ attrs _ ->
     fromMaybe [] $
@@ -150,7 +151,7 @@ handle' i event vdom = case _tree vdom ! i of
           _ -> Nothing
   _ -> error "TODO"
 
-update :: Update -> VirtualDom -> VirtualDom
+update :: Update -> VirtualDom m -> VirtualDom m
 update (Update i idx dyn) vdom =
   vdom
     { _tree =
@@ -170,14 +171,14 @@ replaceAt n newVal (x : xs)
   | n == 0 = newVal : xs
   | otherwise = x : replaceAt (n - 1) newVal xs
 
-data NodeHandle = NodeHandle Int Node VirtualDom
+data NodeHandle m = NodeHandle Int (Node m) (VirtualDom m)
 
-root :: VirtualDom -> NodeHandle
+root :: VirtualDom m -> NodeHandle m
 root vdom = NodeHandle 0 (_tree vdom ! 0) vdom
 
-newtype ElementHandle = ElementHandle NodeHandle
+newtype ElementHandle m = ElementHandle (NodeHandle m)
 
-find :: String -> NodeHandle -> Maybe ElementHandle
+find :: String -> NodeHandle m -> Maybe (ElementHandle m)
 find tag (NodeHandle i _ vdom) =
   listToMaybe $
     foldTree'
@@ -192,5 +193,5 @@ find tag (NodeHandle i _ vdom) =
       i
       (_tree vdom)
 
-click :: ElementHandle -> VirtualDom
+click :: ElementHandle m -> VirtualDom m
 click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom

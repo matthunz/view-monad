@@ -29,20 +29,20 @@ data HtmlAttribute = HtmlAttribute String HtmlAttributeValue
 on_ :: String -> Scope () -> HtmlAttribute
 on_ n s = HtmlAttribute ("on" ++ n) (Handler s)
 
-data Html = HtmlComponent !(Component Html) | Fragment ![Html] | Element !String ![HtmlAttribute] ![Html] | Text !String
+data Html m = HtmlComponent !(Component m (Html m)) | Fragment ![(Html m)] | Element !String ![HtmlAttribute] ![(Html m)] | Text !String
   deriving (Show)
 
-component_ :: Component Html -> Html
+component_ :: Component m (Html m) -> (Html m)
 component_ = HtmlComponent
 
-element_ :: String -> [HtmlAttribute] -> [Html] -> Html
+element_ :: String -> [HtmlAttribute] -> [(Html m)] -> (Html m)
 element_ = Element
 
-div_ :: [HtmlAttribute] -> [Html] -> Html
+div_ :: [HtmlAttribute] -> [(Html m)] -> (Html m)
 div_ = element_ "div"
 
-button_ :: [HtmlAttribute] -> [Html] -> Html
+button_ :: [HtmlAttribute] -> [(Html m)] -> (Html m)
 button_ = element_ "button"
 
-text_ :: String -> Html
+text_ :: String -> (Html m)
 text_ = Text

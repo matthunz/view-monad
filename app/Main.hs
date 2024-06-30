@@ -1,8 +1,9 @@
 module Main where
 
+import Data.Maybe (fromMaybe)
 import ViewMonad
 
-app :: Html
+app :: Html IO
 app = component_ $ do
   (x, setX) <- useState (0 :: Int)
 
@@ -16,13 +17,13 @@ app = component_ $ do
 
 main :: IO ()
 main = do
-  let (_, vdom) = buildHtml app mkVirtualDom
+  (_, vdom) <- buildHtml app mkVirtualDom
   print vdom
 
-  let vdom' = handle 4 "onclick" vdom
-      (mutations, vdom'') = rebuildHtml 0 vdom'
+  let button = fromMaybe (error "TODO") $ find "button" (root vdom)
+  (mutations, vdom') <- rebuildHtml 0 (click button)
   print mutations
 
-  let vdom''' = handle 4 "onclick" vdom''
-      (mutations2, _) = rebuildHtml 0 vdom'''
+  let button' = fromMaybe (error "TODO") $ find "button" (root vdom')
+  (mutations2, _) <- rebuildHtml 0 (click button')
   print mutations2

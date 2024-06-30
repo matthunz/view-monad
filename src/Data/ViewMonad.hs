@@ -36,41 +36,41 @@ instance Monad Scope where
            in (b, updates1 ++ updates2)
       )
 
-newtype Component a = Component
-  { runComponent :: Int -> Int -> [Dynamic] -> (a, Int, [Dynamic])
+newtype Component m a = Component
+  { runComponent :: Int -> Int -> [Dynamic] -> m (a, Int, [Dynamic])
   }
   deriving (Functor)
 
-instance Show (Component a) where
+instance Show (Component m a) where
   show _ = "Component"
 
-instance Applicative Component where
-  pure a = Component (\_ i hooks -> (a, i, hooks))
+instance (Monad m) => Applicative (Component m) where
+  pure a = Component (\_ i hooks -> pure (a, i, hooks))
   (<*>) = ap
 
-instance Monad Component where
+instance (Monad m) => Monad (Component m) where
   (>>=) a f =
     Component
-      ( \i idx hooks ->
-          let (a', idx', hooks') = runComponent a i idx hooks
-              (b, idx'', hooks'') = runComponent (f a') i idx' hooks'
-           in (b, idx'', hooks'')
+      ( \i idx hooks -> do
+          (a', idx', hooks') <- runComponent a i idx hooks
+          (b, idx'', hooks'') <- runComponent (f a') i idx' hooks'
+          return (b, idx'', hooks'')
       )
 
-useHook :: (Typeable a) => (Int -> Int -> a) -> Component a
+useHook :: (Applicative m) => (Typeable a) => (Int -> Int -> a) -> Component m a
 useHook f =
   Component
     ( \i idx hooks ->
         if idx >= length hooks
-          then let x = f i idx in (x, idx + 1, hooks ++ [toDyn x])
+          then let x = f i idx in pure (x, idx + 1, hooks ++ [toDyn x])
           else
             let val = hooks !! idx
-             in (fromMaybe (error "TODO") (fromDynamic val), idx + 1, hooks)
+             in pure (fromMaybe (error "TODO") (fromDynamic val), idx + 1, hooks)
     )
 
 data State a = State !Int !Int !a
 
-useState :: (Typeable a) => a -> Component (a, a -> Scope ())
+useState :: (Monad m) => (Typeable a) => a -> Component m (a, a -> Scope ())
 useState s =
   ( \(State i idx s') ->
       ( s',
