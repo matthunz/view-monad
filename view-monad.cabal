@@ -11,8 +11,9 @@ library
     hs-source-dirs:   src
     default-language: Haskell2010
     ghc-options:      -Wall
-    build-depends:    base >= 4 && < 4.17.2.2,
-                      containers
+    build-depends:
+        base >=4 && <4.17.2.2,
+        containers
 
 executable view-monad
     main-is:          Main.hs
@@ -20,7 +21,7 @@ executable view-monad
     default-language: Haskell2010
     ghc-options:      -Wall
     build-depends:
-        base >= 4 && < 4.17.2.2,
+        base >=4 && <4.17.2.2,
         view-monad
 
 test-suite view-monad-test
@@ -30,5 +31,15 @@ test-suite view-monad-test
     default-language: Haskell2010
     ghc-options:      -Wall
     build-depends:
-        base >= 4 && < 4.17.2.2,
+        base >=4 && <4.17.2.2,
+        view-monad
+
+benchmark view-monad-bench
+    type:             exitcode-stdio-1.0
+    main-is:          Bench.hs
+    hs-source-dirs:   app
+    default-language: Haskell2010
+    build-depends:
+        base <5,
+        criterion >=0.5.0.0 && <1.7,
         view-monad

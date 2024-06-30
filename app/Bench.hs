@@ -1,7 +1,6 @@
-{-# LANGUAGE BangPatterns #-}
-
 module Main where
 
+import Criterion.Main
 import ViewMonad
 
 app :: Html
@@ -16,15 +15,22 @@ app = component_ $ do
         button_ [on_ "click" $ setX (x - 1)] [text_ "Download meme!"]
       ]
 
-main :: IO ()
-main = do
-  let (_, vdom) = buildHtml app mkVirtualDom
-  print vdom
+run :: VirtualDom -> VirtualDom
+run vdom =
+  let (_, vdom') = buildHtml app vdom
+   in loop 10000000000 vdom'
 
+loop :: Int -> VirtualDom -> VirtualDom
+loop 0 v = v
+loop n vdom = do
   let vdom' = handle 4 "onclick" vdom
       (mutations, vdom'') = rebuildHtml 0 vdom'
-  print mutations
+  loop (n - 1) vdom''
 
-  let vdom''' = handle 4 "onclick" vdom''
-      (mutations2, _) = rebuildHtml 0 vdom'''
-  print mutations2
+main =
+  defaultMain
+    [ bgroup
+        "run"
+        [  bench "5" $ whnf run mkVirtualDom
+        ]
+    ]

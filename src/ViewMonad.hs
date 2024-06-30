@@ -27,11 +27,12 @@ where
 
 import Control.Monad (ap)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
+import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
 import Data.Maybe (fromMaybe)
 
-data Update = Update Int Int Dynamic
+data Update = Update !Int !Int !Dynamic
 
 newtype Scope a = Scope {runScope :: Int -> Int -> (a, [Update])}
   deriving (Functor)
@@ -62,7 +63,7 @@ data HtmlAttribute = HtmlAttribute String HtmlAttributeValue
 on_ :: String -> Scope () -> HtmlAttribute
 on_ n s = HtmlAttribute ("on" ++ n) (Handler s)
 
-data Html = HtmlComponent (Component Html) | Fragment [Html] | Element String [HtmlAttribute] [Html] | Text String
+data Html = HtmlComponent !(Component Html) | Fragment ![Html] | Element !String ![HtmlAttribute] ![Html] | Text !String
   deriving (Show)
 
 component_ :: Component Html -> Html
@@ -81,17 +82,17 @@ text_ :: String -> Html
 text_ = Text
 
 data Node
-  = ComponentNode (Component Html) [Dynamic] Int
-  | FragmentNode [Int]
-  | ElementNode String [HtmlAttribute] [Int]
-  | TextNode String
+  = ComponentNode !(Component Html) ![Dynamic] !Int
+  | FragmentNode ![Int]
+  | ElementNode !String ![HtmlAttribute] ![Int]
+  | TextNode !String
   deriving (Show)
 
 type Tree = IntMap Node
 
 data VirtualDom = VirtualDom
-  { _nextId :: Int,
-    _tree :: Tree
+  { _nextId :: !Int,
+    _tree :: !Tree
   }
   deriving (Show)
 
@@ -118,7 +119,7 @@ buildHtml html vdom =
 
 buildChildren :: (Foldable t) => t Html -> VirtualDom -> ([Int], VirtualDom)
 buildChildren content vdom =
-  foldr
+  foldr'
     ( \c (idAcc, vdomAcc) ->
         let (i, vdomAcc') = buildHtml c vdomAcc
          in (i : idAcc, vdomAcc')
@@ -158,7 +159,7 @@ useHook f =
              in (fromMaybe (error "TODO") (fromDynamic val), idx + 1, hooks)
     )
 
-data State a = State Int Int a
+data State a = State !Int !Int !a
 
 useState :: (Typeable a) => a -> Component (a, a -> Scope ())
 useState s =
@@ -191,7 +192,7 @@ rebuildHtml' i html node vdom = case html of
       if tag == lastTag
         then
           let (mutations, vdom') =
-                foldr
+                foldr'
                   ( \(childId, childHtml) (acc, accVdom) ->
                       let childNode = _tree accVdom ! childId
                           (ms, accVdom') = rebuildHtml' childId childHtml childNode accVdom
@@ -205,7 +206,7 @@ rebuildHtml' i html node vdom = case html of
   _ -> error ""
 
 handle :: Int -> String -> VirtualDom -> VirtualDom
-handle i event vdom = foldr update vdom (handle' i event vdom)
+handle i event vdom = foldr' update vdom (handle' i event vdom)
 
 handle' :: Int -> [Char] -> VirtualDom -> [Update]
 handle' i event vdom = case _tree vdom ! i of
