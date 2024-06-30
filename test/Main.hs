@@ -1,5 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- |
+-- Copyright   :  (c) Matt Hunzinger 2024
+-- License     :  BSD-3
+-- Maintainer  :  matthunz2@gmail.com
 module Main (main) where
 
 import Data.Maybe (fromMaybe)
