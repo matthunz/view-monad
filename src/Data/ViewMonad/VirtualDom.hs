@@ -8,6 +8,7 @@ module Data.ViewMonad.VirtualDom
   ( Node (..),
     Tree,
     VirtualDom,
+    Mutation(..),
     mkVirtualDom,
     buildHtml,
     rebuildHtml,
@@ -72,7 +73,7 @@ buildChildren content vdom =
     content
 
 data Mutation = SetText Int String
-  deriving (Show)
+  deriving (Eq, Show)
 
 rebuildHtml :: Int -> VirtualDom -> ([Mutation], VirtualDom)
 rebuildHtml i vdom = case _tree vdom ! i of

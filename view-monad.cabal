@@ -35,7 +35,8 @@ test-suite view-monad-test
     ghc-options:      -Wall
     build-depends:
         base >=4 && <4.17.2.2,
-        view-monad
+        view-monad,
+        hspec
 
 benchmark view-monad-bench
     type:             exitcode-stdio-1.0
