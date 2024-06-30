@@ -6,12 +6,13 @@ app :: Html
 app = component_ $ do
   (x, setX) <- useState (0 :: Int)
 
-  setX (x + 1)
-
-  return $ element_ "div" [text_ (show x)]
+  return $ element_ "div" [on_ "click" $ setX (x + 1)] [text_ (show x)]
 
 main :: IO ()
-main =
+main = do
   let (_, vdom) = buildHtml app mkVirtualDom
-      mutations = rebuildHtml 0 vdom
-   in print mutations
+  print vdom
+
+  let vdom' = handle 1 "onclick" vdom
+      mutations = rebuildHtml 0 vdom'
+  print mutations
