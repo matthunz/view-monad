@@ -15,3 +15,6 @@ app = component_ $ do
         button_ [on_ "click" $ setX (x - 1)] [text_ "Download meme!"]
       ]
 ```
+
+The plan is to eventually integrate this as a virtual dom for [Tauri](https://tauri.app) via [conduct](https://github.com/matthunz/conduct/).
+Native UI should also be possible with [Blitz](https://github.com/DioxusLabs/blitz) or [Masonry](https://github.com/linebender/xilem).
