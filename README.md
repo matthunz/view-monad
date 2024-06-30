@@ -1,5 +1,7 @@
 # view-monad
 
+An experimental declarative UI framework for Haskell inspired by [React](https://github.com/facebook/react).
+
 ```hs
 app :: Html
 app = component_ $ do
