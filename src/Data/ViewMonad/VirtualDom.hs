@@ -15,6 +15,11 @@ module Data.ViewMonad.VirtualDom
     handle,
     handle',
     update,
+    NodeHandle (..),
+    root,
+    ElementHandle,
+    find,
+    click,
   )
 where
 
@@ -22,7 +27,7 @@ import Data.Dynamic (Dynamic)
 import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
 import Data.ViewMonad
 import Data.ViewMonad.Html
 
@@ -34,6 +39,28 @@ data Node
   deriving (Show)
 
 type Tree = IntMap Node
+
+foldTree' :: (Int -> Node -> a -> a) -> a -> Int -> Tree -> a
+foldTree' f acc i tree =
+  let node = tree ! i
+      acc' = f i node acc
+   in case node of
+        ComponentNode _ _ childId -> foldTree' f acc' childId tree
+        FragmentNode childIds ->
+          foldr'
+            ( \childId acc'' ->
+                foldTree' f acc'' childId tree
+            )
+            acc'
+            childIds
+        ElementNode _ _ childIds ->
+          foldr'
+            ( \childId acc'' ->
+                foldTree' f acc'' childId tree
+            )
+            acc'
+            childIds
+        TextNode _ -> acc'
 
 data VirtualDom = VirtualDom
   { _nextId :: !Int,
@@ -142,3 +169,28 @@ replaceAt _ _ [] = []
 replaceAt n newVal (x : xs)
   | n == 0 = newVal : xs
   | otherwise = x : replaceAt (n - 1) newVal xs
+
+data NodeHandle = NodeHandle Int Node VirtualDom
+
+root :: VirtualDom -> NodeHandle
+root vdom = NodeHandle 0 (_tree vdom ! 0) vdom
+
+newtype ElementHandle = ElementHandle NodeHandle
+
+find :: String -> NodeHandle -> Maybe ElementHandle
+find tag (NodeHandle i _ vdom) =
+  listToMaybe $
+    foldTree'
+      ( \nodeId n acc -> case n of
+          ElementNode t _ _ ->
+            if t == tag
+              then acc ++ [ElementHandle $ NodeHandle nodeId n vdom]
+              else acc
+          _ -> acc
+      )
+      []
+      i
+      (_tree vdom)
+
+click :: ElementHandle -> VirtualDom
+click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom

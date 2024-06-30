@@ -2,6 +2,7 @@
 
 module Main (main) where
 
+import Data.Maybe (fromMaybe)
 import Test.Hspec
 import ViewMonad
 
@@ -19,8 +20,8 @@ app = component_ $ do
 main :: IO ()
 main = hspec $ do
   describe "Data.VirtualDom.rebuildHtml" $ do
-    it "returns the first element of a list" $ do
+    it "rebuilds a single text node" $ do
       let (_, vdom) = buildHtml app mkVirtualDom
-          vdom' = handle 2 "onclick" vdom
-          (mutations, _) = rebuildHtml 0 vdom'
+          button = fromMaybe (error "TODO") $ find "button" (root vdom)
+          (mutations, _) = rebuildHtml 0 (click button)
       mutations `shouldBe` [SetText 4 "1"]
