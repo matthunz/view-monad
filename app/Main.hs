@@ -1,6 +1,6 @@
 module Main where
 
-import Data.Maybe (fromMaybe)
+import Conduit
 import ViewMonad
 
 app :: (Monad m) => Html m
@@ -17,6 +17,13 @@ app = component_ $ do
 
 main :: IO ()
 main = do
+  let events = [(3, "onclick"), (3, "onclick")]
+  mutations <- runConduit $ mapM_ yield events .| stream app .| sinkList
+  print mutations
+
+{-
+main :: IO ()
+main = do
   (ms, vdom) <- buildHtml app mkVirtualDom
   print ms
   print vdom
@@ -28,3 +35,4 @@ main = do
   let button' = fromMaybe (error "TODO") $ find "button" (root vdom')
   (mutations2, _) <- rebuildHtml 0 (click button')
   print mutations2
+-}

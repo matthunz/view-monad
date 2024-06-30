@@ -16,6 +16,7 @@ library
     ghc-options:      -Wall
     build-depends:
         base >=4 && <4.17.2.2,
+        conduit,
         containers
 
 executable view-monad
@@ -25,7 +26,8 @@ executable view-monad
     ghc-options:      -Wall
     build-depends:
         base >=4 && <4.17.2.2,
-        view-monad
+        view-monad,
+        conduit
 
 test-suite view-monad-test
     type:             exitcode-stdio-1.0

@@ -21,9 +21,11 @@ module Data.ViewMonad.VirtualDom
     ElementHandle,
     find,
     click,
+    stream,
   )
 where
 
+import Conduit
 import Control.Monad (foldM)
 import Data.Dynamic (Dynamic)
 import Data.Foldable (foldr')
@@ -73,6 +75,7 @@ data VirtualDom m = VirtualDom
 mkVirtualDom :: VirtualDom m
 mkVirtualDom = VirtualDom 0 mempty
 
+-- | Mutation to apply to the HTML DOM.
 data Mutation
   = InsertElement Int Int String
   | InsertText Int Int String
@@ -85,6 +88,7 @@ buildHtml html vdom = do
   (mutations, _, vdom') <- buildHtml' html 0 vdom
   return (mutations, vdom')
 
+-- | Build HTML into a given parent ID.
 buildHtml' :: (Monad m) => Html m -> Int -> VirtualDom m -> m ([Mutation], Int, VirtualDom m)
 buildHtml' html parentId vdom = do
   let i = _nextId vdom
@@ -103,6 +107,7 @@ buildHtml' html parentId vdom = do
     Text s -> pure ([InsertText parentId i s], TextNode s, vdom')
   return (mutations, i, vdom'' {_tree = insert i node (_tree vdom'')})
 
+-- | Build the content of an HTML item.
 buildChildren :: (Foldable t, Monad m) => t (Html m) -> Int -> VirtualDom m -> m ([Mutation], [Int], VirtualDom m)
 buildChildren content parentId vdom =
   foldM
@@ -205,3 +210,20 @@ find tag (NodeHandle i _ vdom) =
 
 click :: ElementHandle m -> VirtualDom m
 click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom
+
+stream :: (Monad m) => Html m -> ConduitT (Int, String) Mutation m ()
+stream html = do
+  (mutations, vdom) <- lift $ buildHtml html mkVirtualDom
+  mapM_ yield mutations
+  stream' vdom
+
+stream' :: (Monad m) => VirtualDom m -> ConduitT (Int, String) Mutation m ()
+stream' vdom = do
+  event <- await
+  case event of
+    Nothing -> return ()
+    Just (i, eventName) -> do
+      let vdom' = handle i eventName vdom
+      (mutations, vdom'') <- lift $ rebuildHtml 0 vdom'
+      mapM_ yield mutations
+      stream' vdom''
