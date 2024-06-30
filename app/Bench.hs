@@ -31,6 +31,6 @@ main =
   defaultMain
     [ bgroup
         "run"
-        [  bench "5" $ whnf run mkVirtualDom
+        [ bench "5" $ whnf run mkVirtualDom
         ]
     ]
