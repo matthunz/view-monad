@@ -8,7 +8,7 @@ module Data.ViewMonad.VirtualDom
   ( Node (..),
     Tree,
     VirtualDom,
-    Mutation(..),
+    Mutation (..),
     mkVirtualDom,
     buildHtml,
     rebuildHtml,

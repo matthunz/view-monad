@@ -12,9 +12,8 @@ app = component_ $ do
   return $
     div_
       []
-      [ text_ $ "Useful files: " ++ show x,
-        button_ [on_ "click" $ setX (x + 1)] [text_ "Clone repo!"],
-        button_ [on_ "click" $ setX (x - 1)] [text_ "Download meme!"]
+      [ text_ $ show x,
+        button_ [on_ "click" $ setX (x + 1)] [text_ "Clone repo!"]
       ]
 
 main :: IO ()
@@ -22,7 +21,6 @@ main = hspec $ do
   describe "Data.VirtualDom.rebuildHtml" $ do
     it "returns the first element of a list" $ do
       let (_, vdom) = buildHtml app mkVirtualDom
-          vdom' = handle 4 "onclick" vdom
+          vdom' = handle 2 "onclick" vdom
           (mutations, _) = rebuildHtml 0 vdom'
-
-      mutations `shouldBe` [SetText 6 "Useful files: 1"]
+      mutations `shouldBe` [SetText 4 "1"]
