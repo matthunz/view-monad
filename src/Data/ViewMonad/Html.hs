@@ -16,6 +16,8 @@ module Data.ViewMonad.Html
 where
 
 import Data.ViewMonad
+import GHC.Stack (HasCallStack, callStack, getCallStack)
+import GHC.Stack.Types (SrcLoc)
 
 data HtmlAttributeValue = TextValue String | Handler (Scope ())
 
@@ -29,11 +31,14 @@ data HtmlAttribute = HtmlAttribute String HtmlAttributeValue
 on_ :: String -> Scope () -> HtmlAttribute
 on_ n s = HtmlAttribute ("on" ++ n) (Handler s)
 
-data Html m = HtmlComponent !(Component m (Html m)) | Fragment ![Html m] | Element !String ![HtmlAttribute] ![Html m] | Text !String
-  deriving (Show)
+data Html m
+  = HtmlComponent !SrcLoc !(Component m (Html m))
+  | Fragment ![Html m]
+  | Element !String ![HtmlAttribute] ![Html m]
+  | Text !String
 
-component_ :: Component m (Html m) -> Html m
-component_ = HtmlComponent
+component_ :: (HasCallStack) => Component m (Html m) -> Html m
+component_ = HtmlComponent (snd (head (getCallStack  callStack)))
 
 element_ :: String -> [HtmlAttribute] -> [Html m] -> Html m
 element_ = Element
