@@ -38,7 +38,9 @@ data Html m
   | Text !String
 
 component_ :: (HasCallStack) => Component m (Html m) -> Html m
-component_ = HtmlComponent (snd (head (getCallStack  callStack)))
+component_ = case (getCallStack callStack) of
+  ((_, loc) : _) -> HtmlComponent loc
+  [] -> HtmlComponent (error "Missing callstack.")
 
 element_ :: String -> [HtmlAttribute] -> [Html m] -> Html m
 element_ = Element

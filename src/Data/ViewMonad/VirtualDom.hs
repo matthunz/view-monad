@@ -34,8 +34,8 @@ import Data.List (findIndex)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.ViewMonad
 import Data.ViewMonad.Html
-import GHC.Stack.Types (SrcLoc)
 import GHC.Exception (prettySrcLoc)
+import GHC.Stack.Types (SrcLoc)
 
 data Node m
   = ComponentNode !SrcLoc !(Component m (Html m)) ![Dynamic] !Int
@@ -179,7 +179,7 @@ update (Update i idx dyn) vdom =
     { _tree =
         adjust
           ( \case
-              ComponentNode  src html hooks childId ->
+              ComponentNode src html hooks childId ->
                 ComponentNode src html (replaceAt idx dyn hooks) childId
               _ -> error ""
           )
