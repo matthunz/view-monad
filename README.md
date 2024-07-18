@@ -3,9 +3,18 @@
 An experimental declarative UI framework for Haskell inspired by [React](https://github.com/facebook/react).
 
 ```hs
+import Control.Lens
+import ViewMonad
+
+data Counter = Counter
+  { _counter :: Int
+  }
+
+makeLenses ''Counter
+
 app :: (Monad m) => Html m
-app = component_ $ do
-  (count, setCount) <- useState (0 :: Int)
+app = component_ (Counter 0) $ do
+  (count, setCount) <- useState counter
 
   return $
     div_
