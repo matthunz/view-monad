@@ -26,12 +26,14 @@ module Data.ViewMonad.VirtualDom
 where
 
 import Conduit
+import Control.Lens
 import Control.Monad (foldM)
 import Data.Dynamic (Dynamic)
 import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
 import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Typeable
 import Data.ViewMonad
 import Data.ViewMonad.Html
 import GHC.Exception (prettySrcLoc)
@@ -168,19 +170,26 @@ handle' i event vdom = case _tree vdom ! i of
       findIndex (\(HtmlAttribute n _) -> n == event) attrs
         >>= \x -> case attrs !! x of
           HtmlAttribute _ (Handler s) ->
-            let (_, updates) = runScope s i 0
+            let (_, updates) = runScope s i
              in Just updates
           _ -> Nothing
   _ -> error "TODO"
 
 update :: Update -> VirtualDom m -> VirtualDom m
-update (Update i idx dyn) vdom =
+update (Update i val l) vdom =
   vdom
     { _tree =
         adjust
           ( \case
               ComponentNode (DynComponent state content) childId ->
-                ComponentNode (DynComponent state content) childId
+                ComponentNode
+                  ( DynComponent
+                      ( fromMaybe (error "TODO") $
+                          cast (set l val (fromMaybe (error "TODO") $ cast state))
+                      )
+                      content
+                  )
+                  childId
               _ -> error ""
           )
           i

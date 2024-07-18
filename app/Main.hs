@@ -7,14 +7,14 @@ import Data.Maybe (fromMaybe)
 import ViewMonad
 
 data Counter = Counter
-  { _count :: Int
+  { _counter :: Int
   }
 
 makeLenses ''Counter
 
 app :: (Monad m) => Html m
 app = component_ (Counter 0) $ do
-  (count, setCount) <- useState count
+  (count, setCount) <- useState counter
 
   return $
     div_

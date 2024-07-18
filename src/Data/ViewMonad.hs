@@ -20,22 +20,22 @@ import Control.Monad (ap)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Maybe (fromMaybe)
 
-data Update = Update !Int !Int !Dynamic
+data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
 
-newtype Scope a = Scope {runScope :: Int -> Int -> (a, [Update])}
+newtype Scope a = Scope {runScope :: Int -> (a, [Update])}
   deriving (Functor)
 
 instance Applicative Scope where
-  pure a = Scope (\_ _ -> (a, []))
+  pure a = Scope (\_ -> (a, []))
 
   (<*>) = ap
 
 instance Monad Scope where
   (>>=) a f =
     Scope
-      ( \i idx ->
-          let (a', updates1) = runScope a i idx
-              (b, updates2) = runScope (f a') i idx
+      ( \i ->
+          let (a', updates1) = runScope a i
+              (b, updates2) = runScope (f a') i
            in (b, updates1 ++ updates2)
       )
 
@@ -63,5 +63,5 @@ instance (Monad m) => Monad (Component m s) where
 data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
 
-useState :: (Monad m) => Lens' s a -> Component m s (a, a -> Scope ())
-useState f = Component (\i state -> pure ((state ^. f, (\new -> Scope (\i _ -> error "TODO"))), state))
+useState :: (Monad m, Typeable s) => Lens' s a -> Component m s (a, a -> Scope ())
+useState f = Component (\i state -> pure ((state ^. f, (\new -> Scope (\_ -> ((), [Update i new f])))), state))
