@@ -12,9 +12,9 @@ module Data.ViewMonad
     useState,
     Update (..),
     Scope (..),
-    Effect,
-    mkEffect,
-    useMemo
+    Memo,
+    memo,
+    useMemo,
   )
 where
 
@@ -77,14 +77,14 @@ useState f =
           )
     )
 
-data Effect d a = Effect (Maybe (d, a))
+data Memo d a = Memo (Maybe (d, a))
 
-mkEffect :: Effect d a
-mkEffect = Effect Nothing
+memo :: Memo d a
+memo = Memo Nothing
 
 useMemo ::
   (Eq d, Monad m, Typeable s) =>
-  Lens' s (Effect d a) ->
+  Lens' s (Memo d a) ->
   d ->
   (d -> Scope a) ->
   Component m s a
@@ -92,13 +92,13 @@ useMemo l dep f =
   Component
     ( \i state ->
         case state ^. l of
-          (Effect (Just (cachedDep, cached))) ->
+          (Memo (Just (cachedDep, cached))) ->
             if cachedDep == dep
               then pure (cached, state)
               else do
                 let (a, updates) = runScope (f dep) i
-                return (a, set l (Effect $ Just (dep, a)) state)
-          (Effect Nothing) -> do
+                return (a, set l (Memo $ Just (dep, a)) state)
+          (Memo Nothing) -> do
             let (a, updates) = runScope (f dep) i
-            return (a, set l (Effect $ Just (dep, a)) state)
+            return (a, set l (Memo $ Just (dep, a)) state)
     )

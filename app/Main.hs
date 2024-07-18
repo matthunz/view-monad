@@ -8,17 +8,16 @@ import ViewMonad
 
 data Counter = Counter
   { _counter :: Int,
-    _eff :: Effect Int Int
+    _output :: Memo Int Int
   }
 
 makeLenses ''Counter
 
 app :: (Monad m) => Html m
-app = component_ (Counter 0 mkEffect) $ do
+app = component_ (Counter 0 memo) $ do
   (count, setCount) <- useState counter
 
-  count' <- useMemo eff count $ \x -> do
-    return $ x * 2
+  count' <- useMemo output count $ \x -> pure $ x * 2
 
   return $
     div_
