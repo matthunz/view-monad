@@ -1,3 +1,5 @@
+{-# LANGUAGE GADTs #-}
+
 -- |
 -- Copyright   :  (c) Matt Hunzinger 2024
 -- License     :  BSD-3
@@ -15,9 +17,8 @@ module Data.ViewMonad.Html
   )
 where
 
+import Data.Typeable
 import Data.ViewMonad
-import GHC.Stack (HasCallStack, callStack, getCallStack)
-import GHC.Stack.Types (SrcLoc)
 
 data HtmlAttributeValue = TextValue String | Handler (Scope ())
 
@@ -32,15 +33,13 @@ on_ :: String -> Scope () -> HtmlAttribute
 on_ n s = HtmlAttribute ("on" ++ n) (Handler s)
 
 data Html m
-  = HtmlComponent !SrcLoc !(Component m (Html m))
+  = HtmlComponent !(DynComponent m (Html m))
   | Fragment ![Html m]
   | Element !String ![HtmlAttribute] ![Html m]
   | Text !String
 
-component_ :: (HasCallStack) => Component m (Html m) -> Html m
-component_ = case (getCallStack callStack) of
-  ((_, loc) : _) -> HtmlComponent loc
-  [] -> HtmlComponent (error "Missing callstack.")
+component_ :: (Typeable s) => s -> Component m s (Html m) -> Html m
+component_ s c = HtmlComponent (DynComponent s c)
 
 element_ :: String -> [HtmlAttribute] -> [Html m] -> Html m
 element_ = Element

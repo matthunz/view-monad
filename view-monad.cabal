@@ -17,7 +17,8 @@ library
     build-depends:
         base < 5,
         conduit,
-        containers
+        containers,
+        lens
 
 executable view-monad
     main-is:          Main.hs
@@ -27,7 +28,8 @@ executable view-monad
     build-depends:
         base < 5,
         view-monad,
-        conduit
+        conduit,
+        lens
 
 test-suite view-monad-test
     type:             exitcode-stdio-1.0
