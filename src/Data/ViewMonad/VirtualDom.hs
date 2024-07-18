@@ -28,7 +28,6 @@ where
 import Conduit
 import Control.Lens
 import Control.Monad (foldM)
-import Data.Dynamic (Dynamic)
 import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
@@ -36,8 +35,6 @@ import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Typeable
 import Data.ViewMonad
 import Data.ViewMonad.Html
-import GHC.Exception (prettySrcLoc)
-import GHC.Stack.Types (SrcLoc)
 
 data Node m
   = ComponentNode !(DynComponent m (Html m)) !Int
@@ -195,12 +192,6 @@ update (Update i val l) vdom =
           i
           (_tree vdom)
     }
-
-replaceAt :: Int -> a -> [a] -> [a]
-replaceAt _ _ [] = []
-replaceAt n newVal (x : xs)
-  | n == 0 = newVal : xs
-  | otherwise = x : replaceAt (n - 1) newVal xs
 
 data NodeHandle m = NodeHandle Int (Node m) (VirtualDom m)
 

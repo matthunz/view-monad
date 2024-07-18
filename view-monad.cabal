@@ -7,15 +7,17 @@ build-type:      Simple
 extra-doc-files: CHANGELOG.md
 
 library
-    exposed-modules:  ViewMonad,
-                      Data.ViewMonad,
-                      Data.ViewMonad.Html,
-                      Data.ViewMonad.VirtualDom
+    exposed-modules:
+        ViewMonad
+        Data.ViewMonad
+        Data.ViewMonad.Html
+        Data.ViewMonad.VirtualDom
+
     hs-source-dirs:   src
     default-language: Haskell2010
     ghc-options:      -Wall
     build-depends:
-        base < 5,
+        base <5,
         conduit,
         containers,
         lens
@@ -26,7 +28,7 @@ executable view-monad
     default-language: Haskell2010
     ghc-options:      -Wall
     build-depends:
-        base < 5,
+        base <5,
         view-monad,
         conduit,
         lens
@@ -40,7 +42,8 @@ test-suite view-monad-test
     build-depends:
         base >=4 && <4.17.2.2,
         view-monad,
-        hspec
+        hspec,
+        lens
 
 benchmark view-monad-bench
     type:             exitcode-stdio-1.0
@@ -50,4 +53,5 @@ benchmark view-monad-bench
     build-depends:
         base <5,
         criterion >=0.5.0.0 && <1.7,
-        view-monad
+        view-monad,
+        lens

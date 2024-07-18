@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- |
 -- Copyright   :  (c) Matt Hunzinger 2024
@@ -6,19 +7,27 @@
 -- Maintainer  :  matthunz2@gmail.com
 module Main (main) where
 
+import Control.Lens
 import Data.Maybe (fromMaybe)
 import Test.Hspec
 import ViewMonad
 
+data Counter = Counter
+  { _counter :: Int
+  }
+
+makeLenses ''Counter
+
 app :: (Monad m) => Html m
-app = component_ $ do
-  (x, setX) <- useState (0 :: Int)
+app = component_ (Counter 0) $ do
+  (count, setCount) <- useState counter
 
   return $
     div_
       []
-      [ text_ $ show x,
-        button_ [on_ "click" $ setX (x + 1)] [text_ "Clone repo!"]
+      [ text_ $ show count,
+        button_ [on_ "click" $ setCount (count + 1)] [text_ "Clone repo!"],
+        button_ [on_ "click" $ setCount (count - 1)] [text_ "Download meme!"]
       ]
 
 main :: IO ()

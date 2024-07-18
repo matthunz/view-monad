@@ -1,18 +1,28 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
+import Control.Lens
 import Criterion.Main
+import Data.Maybe (fromMaybe)
 import ViewMonad
 
-app :: Html IO
-app = component_ $ do
-  (x, setX) <- useState (0 :: Int)
+data Counter = Counter
+  { _counter :: Int
+  }
+
+makeLenses ''Counter
+
+app :: (Monad m) => Html m
+app = component_ (Counter 0) $ do
+  (count, setCount) <- useState counter
 
   return $
     div_
       []
-      [ text_ $ "Useful files: " ++ show x,
-        button_ [on_ "click" $ setX (x + 1)] [text_ "Clone repo!"],
-        button_ [on_ "click" $ setX (x - 1)] [text_ "Download meme!"]
+      [ text_ $ "Useful files: " ++ show count,
+        button_ [on_ "click" $ setCount (count + 1)] [text_ "Clone repo!"],
+        button_ [on_ "click" $ setCount (count - 1)] [text_ "Download meme!"]
       ]
 
 run :: VirtualDom IO -> IO (VirtualDom IO)

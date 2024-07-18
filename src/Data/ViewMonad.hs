@@ -63,4 +63,13 @@ data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
 
 useState :: (Monad m, Typeable s) => Lens' s a -> Component m s (a, a -> Scope ())
-useState f = Component (\i state -> pure ((state ^. f, (\new -> Scope (\_ -> ((), [Update i new f])))), state))
+useState f =
+  Component
+    ( \i state ->
+        pure
+          ( ( state ^. f,
+              (\new -> Scope (\_ -> ((), [Update i new f])))
+            ),
+            state
+          )
+    )
