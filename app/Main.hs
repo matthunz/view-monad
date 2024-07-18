@@ -34,9 +34,6 @@ main = do
   print vdom
 
   let button = fromMaybe (error "TODO") $ find "button" (root vdom)
-  (mutations, vdom') <- rebuildHtml 0 (click button)
+  vdom' <- click button
+  (mutations, vdom'') <- rebuildHtml 0 vdom'
   print mutations
-
-  let button' = fromMaybe (error "TODO") $ find "button" (root vdom')
-  (mutations2, _) <- rebuildHtml 0 (click button')
-  print mutations2

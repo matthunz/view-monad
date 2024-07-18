@@ -157,18 +157,23 @@ rebuildHtml' i html node vdom = case html of
     _ -> error ""
   _ -> error ""
 
-handle :: Int -> String -> VirtualDom m -> VirtualDom m
-handle i event vdom = foldr' update vdom (handle' i event vdom)
+handle :: (Monad m) => Int -> String -> VirtualDom m -> m (VirtualDom m)
+handle i event vdom = do
+  updates <- handle' i event vdom
+  return $ foldr update vdom updates
 
-handle' :: Int -> [Char] -> VirtualDom m -> [Update]
+handle' :: (Monad m) => Int -> [Char] -> VirtualDom m -> m [Update]
 handle' i event vdom = case _tree vdom ! i of
-  ElementNode _ attrs _ ->
-    fromMaybe [] $
-      findIndex (\(HtmlAttribute n _) -> n == event) attrs
-        >>= \x -> case attrs !! x of
-          HtmlAttribute _ (Handler s) -> error "TODO"
-          _ -> Nothing
-  _ -> error "TODO"
+  ElementNode _ attrs _ -> do
+    let res =
+          findIndex (\(HtmlAttribute n _) -> n == event) attrs
+            >>= \x -> case attrs !! x of
+              HtmlAttribute _ (Handler s) -> Just $ runScope s i
+              _ -> Nothing
+    case res of
+      Just s -> fmap snd s
+      Nothing -> pure []
+  _ -> pure []
 
 update :: Update -> VirtualDom m -> VirtualDom m
 update (Update i val l) vdom =
@@ -213,7 +218,7 @@ find tag (NodeHandle i _ vdom) =
       i
       (_tree vdom)
 
-click :: ElementHandle m -> VirtualDom m
+click :: (Monad m) => ElementHandle m -> m (VirtualDom m)
 click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom
 
 stream :: (Monad m) => Html m -> ConduitT (Int, String) Mutation m ()
@@ -228,7 +233,7 @@ stream' vdom = do
   case event of
     Nothing -> return ()
     Just (i, eventName) -> do
-      let vdom' = handle i eventName vdom
+      vdom' <- lift $ handle i eventName vdom
       (mutations, vdom'') <- lift $ rebuildHtml 0 vdom'
       mapM_ yield mutations
       stream' vdom''

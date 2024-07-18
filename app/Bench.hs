@@ -33,7 +33,7 @@ run vdom = do
 loop :: Int -> VirtualDom IO -> IO (VirtualDom IO)
 loop 0 v = pure v
 loop n vdom = do
-  let vdom' = handle 4 "onclick" vdom
+  vdom' <- handle 4 "onclick" vdom
   (mutations, vdom'') <- rebuildHtml 0 vdom'
   loop (n - 1) vdom''
 
