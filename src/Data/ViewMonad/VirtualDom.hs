@@ -28,7 +28,7 @@ where
 import Conduit
 import Control.Lens
 import Control.Monad (foldM)
-import Data.Foldable (foldr', foldrM)
+import Data.Foldable (foldr')
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
 import Data.Maybe (fromMaybe, listToMaybe)
