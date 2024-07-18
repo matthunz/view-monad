@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |
 -- Copyright   :  (c) Matt Hunzinger 2024
@@ -6,13 +8,14 @@
 -- Maintainer  :  matthunz2@gmail.com
 module Data.ViewMonad
   ( Component (..),
-    useHook,
+    DynComponent (..),
     useState,
     Update (..),
     Scope (..),
   )
 where
 
+import Control.Lens
 import Control.Monad (ap)
 import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
 import Data.Maybe (fromMaybe)
@@ -36,45 +39,29 @@ instance Monad Scope where
            in (b, updates1 ++ updates2)
       )
 
-newtype Component m a = Component
-  { runComponent :: Int -> Int -> [Dynamic] -> m (a, Int, [Dynamic])
+newtype Component m s a = Component
+  { runComponent :: Int -> s -> m (a, s)
   }
   deriving (Functor)
 
-instance Show (Component m a) where
+instance Show (Component m s a) where
   show _ = "Component"
 
-instance (Monad m) => Applicative (Component m) where
-  pure a = Component (\_ i hooks -> pure (a, i, hooks))
+instance (Monad m) => Applicative (Component m s) where
+  pure a = Component (\_ state -> pure (a, state))
   (<*>) = ap
 
-instance (Monad m) => Monad (Component m) where
+instance (Monad m) => Monad (Component m s) where
   (>>=) a f =
     Component
-      ( \i idx hooks -> do
-          (a', idx', hooks') <- runComponent a i idx hooks
-          (b, idx'', hooks'') <- runComponent (f a') i idx' hooks'
-          return (b, idx'', hooks'')
+      ( \i state -> do
+          (a', state') <- runComponent a i state
+          (b, state'') <- runComponent (f a') i state'
+          return (b, state'')
       )
 
-useHook :: (Applicative m) => (Typeable a) => (Int -> Int -> a) -> Component m a
-useHook f =
-  Component
-    ( \i idx hooks ->
-        if idx >= length hooks
-          then let x = f i idx in pure (x, idx + 1, hooks ++ [toDyn x])
-          else
-            let val = hooks !! idx
-             in pure (fromMaybe (error "TODO") (fromDynamic val), idx + 1, hooks)
-    )
+data DynComponent m a where
+  DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
 
-data State a = State !Int !Int !a
-
-useState :: (Monad m) => (Typeable a) => a -> Component m (a, a -> Scope ())
-useState s =
-  ( \(State i idx s') ->
-      ( s',
-        \new -> Scope (\_ _ -> ((), [Update i idx (toDyn (State i idx new))]))
-      )
-  )
-    <$> useHook (\i idx -> State i idx s)
+useState :: (Monad m) => Lens' s a -> Component m s (a, a -> Scope ())
+useState f = Component (\i state -> pure ((state ^. f, (\new -> Scope (\i _ -> error "TODO"))), state))

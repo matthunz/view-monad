@@ -38,13 +38,13 @@ import GHC.Exception (prettySrcLoc)
 import GHC.Stack.Types (SrcLoc)
 
 data Node m
-  = ComponentNode !SrcLoc !(Component m (Html m)) ![Dynamic] !Int
+  = ComponentNode !(DynComponent m (Html m)) !Int
   | FragmentNode ![Int]
   | ElementNode !String ![HtmlAttribute] ![Int]
   | TextNode !String
 
 instance Show (Node m) where
-  show (ComponentNode src _ _ cs) = "ComponentNode " ++ prettySrcLoc src ++ " " ++ show cs
+  show (ComponentNode _ c) = "ComponentNode " ++ show c
   show (FragmentNode cs) = "FragmentNode" ++ show cs
   show (ElementNode t _ cs) = "ElementNode " ++ t ++ " " ++ show cs
   show (TextNode s) = "TextNode " ++ s
@@ -56,7 +56,7 @@ foldTree' f acc i tree =
   let node = tree ! i
       acc' = f i node acc
    in case node of
-        ComponentNode _ _ _ childId -> foldTree' f acc' childId tree
+        ComponentNode _ childId -> foldTree' f acc' childId tree
         FragmentNode childIds ->
           foldr'
             ( \childId acc'' ->
@@ -101,10 +101,10 @@ buildHtml' html parentId vdom = do
   let i = _nextId vdom
       vdom' = vdom {_nextId = _nextId vdom + 1}
   (mutations, node, vdom'') <- case html of
-    HtmlComponent src content -> do
-      (contentHtml, _, hooks) <- runComponent content i 0 []
+    HtmlComponent (DynComponent state content) -> do
+      (contentHtml, state') <- runComponent content i state
       (ms, contentId, vdom2) <- buildHtml' contentHtml i vdom'
-      return (ms, ComponentNode src content hooks contentId, vdom2)
+      return (ms, ComponentNode (DynComponent state' content) contentId, vdom2)
     Fragment content -> do
       (ms, contentIds, vdom2) <- buildChildren content i vdom'
       return (ms, FragmentNode contentIds, vdom2)
@@ -127,10 +127,10 @@ buildChildren content parentId vdom =
 
 rebuildHtml :: (Monad m) => Int -> VirtualDom m -> m ([Mutation], VirtualDom m)
 rebuildHtml i vdom = case _tree vdom ! i of
-  ComponentNode src content hooks contentId -> do
+  ComponentNode (DynComponent state content) contentId -> do
     let contentNode = _tree vdom ! contentId
-    (contentHtml, _, hooks') <- runComponent content i 0 hooks
-    let vdom' = vdom {_tree = insert i (ComponentNode src content hooks' contentId) (_tree vdom)}
+    (contentHtml, state') <- runComponent content i state
+    let vdom' = vdom {_tree = insert i (ComponentNode (DynComponent state' content) contentId) (_tree vdom)}
     return $ rebuildHtml' contentId contentHtml contentNode vdom'
   _ -> error ""
 
@@ -179,8 +179,8 @@ update (Update i idx dyn) vdom =
     { _tree =
         adjust
           ( \case
-              ComponentNode src html hooks childId ->
-                ComponentNode src html (replaceAt idx dyn hooks) childId
+              ComponentNode (DynComponent state content) childId ->
+                ComponentNode (DynComponent state content) childId
               _ -> error ""
           )
           i
