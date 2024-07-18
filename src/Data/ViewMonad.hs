@@ -24,21 +24,21 @@ import Data.Typeable
 
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
 
-newtype Scope a = Scope {runScope :: Int -> (a, [Update])}
+newtype Scope m a = Scope {runScope :: Int -> m (a, [Update])}
   deriving (Functor)
 
-instance Applicative Scope where
-  pure a = Scope (\_ -> (a, []))
+instance (Monad m) => Applicative (Scope m) where
+  pure a = Scope (\_ -> pure (a, []))
 
   (<*>) = ap
 
-instance Monad Scope where
+instance (Monad m) => Monad (Scope m) where
   (>>=) a f =
     Scope
-      ( \i ->
-          let (a', updates1) = runScope a i
-              (b, updates2) = runScope (f a') i
-           in (b, updates1 ++ updates2)
+      ( \i -> do
+          (a', updates1) <- runScope a i
+          (b, updates2) <- runScope (f a') i
+          return (b, updates1 ++ updates2)
       )
 
 newtype Component m s a = Component
@@ -65,13 +65,13 @@ instance (Monad m) => Monad (Component m s) where
 data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
 
-useState :: (Monad m, Typeable s) => Lens' s a -> Component m s (a, a -> Scope ())
+useState :: (Monad m, Typeable s) => Lens' s a -> Component m s (a, a -> Scope m ())
 useState f =
   Component
     ( \i state ->
         pure
           ( ( state ^. f,
-              (\new -> Scope (\_ -> ((), [Update i new f])))
+              (\new -> Scope (\_ -> pure ((), [Update i new f])))
             ),
             state
           )
@@ -86,7 +86,7 @@ useMemo ::
   (Eq d, Monad m, Typeable s) =>
   Lens' s (Memo d a) ->
   d ->
-  (d -> Scope a) ->
+  (d -> Scope m a) ->
   Component m s a
 useMemo l dep f =
   Component
@@ -96,9 +96,9 @@ useMemo l dep f =
             if cachedDep == dep
               then pure (cached, state)
               else do
-                let (a, updates) = runScope (f dep) i
+                (a, updates) <- runScope (f dep) i
                 return (a, set l (Memo $ Just (dep, a)) state)
           (Memo Nothing) -> do
-            let (a, updates) = runScope (f dep) i
+            (a, updates) <- runScope (f dep) i
             return (a, set l (Memo $ Just (dep, a)) state)
     )

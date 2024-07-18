@@ -39,7 +39,7 @@ import Data.ViewMonad.Html
 data Node m
   = ComponentNode !(DynComponent m (Html m)) !Int
   | FragmentNode ![Int]
-  | ElementNode !String ![HtmlAttribute] ![Int]
+  | ElementNode !String ![HtmlAttribute m] ![Int]
   | TextNode !String
 
 instance Show (Node m) where
@@ -166,9 +166,7 @@ handle' i event vdom = case _tree vdom ! i of
     fromMaybe [] $
       findIndex (\(HtmlAttribute n _) -> n == event) attrs
         >>= \x -> case attrs !! x of
-          HtmlAttribute _ (Handler s) ->
-            let (_, updates) = runScope s i
-             in Just updates
+          HtmlAttribute _ (Handler s) -> error "TODO"
           _ -> Nothing
   _ -> error "TODO"
 
