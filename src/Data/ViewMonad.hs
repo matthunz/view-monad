@@ -42,7 +42,7 @@ instance (Monad m) => Monad (Scope m) where
       )
 
 newtype Component m s a = Component
-  { runComponent :: Int -> s -> m (a, s)
+  { runComponent :: Int -> s -> Scope m (a, s)
   }
   deriving (Functor)
 
@@ -91,14 +91,16 @@ useMemo ::
 useMemo l dep f =
   Component
     ( \i state ->
-        case state ^. l of
-          (Memo (Just (cachedDep, cached))) ->
-            if cachedDep == dep
-              then pure (cached, state)
-              else do
-                (a, updates) <- runScope (f dep) i
-                return (a, set l (Memo $ Just (dep, a)) state)
-          (Memo Nothing) -> do
-            (a, updates) <- runScope (f dep) i
-            return (a, set l (Memo $ Just (dep, a)) state)
+        let runner =
+              Scope
+                ( \_ -> do
+                    (a, updates) <- runScope (f dep) i
+                    return ((a, set l (Memo $ Just (dep, a)) state), updates)
+                )
+         in case state ^. l of
+              (Memo (Just (cachedDep, cached))) ->
+                if cachedDep == dep
+                  then pure (cached, state)
+                  else runner
+              (Memo Nothing) -> runner
     )

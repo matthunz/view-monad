@@ -89,48 +89,54 @@ data Mutation
   deriving (Eq, Show)
 
 -- | Build the root HTML.
-buildHtml :: (Monad m) => Html m -> VirtualDom m -> m ([Mutation], VirtualDom m)
+buildHtml :: (Monad m) => Html m -> VirtualDom m -> m ([Mutation], [Update], VirtualDom m)
 buildHtml html vdom = do
-  (mutations, _, vdom') <- buildHtml' html 0 vdom
-  return (mutations, vdom')
+  (mutations, _, updates, vdom') <- buildHtml' html 0 vdom
+  return (mutations, updates, vdom')
 
 -- | Build HTML into a given parent ID.
-buildHtml' :: (Monad m) => Html m -> Int -> VirtualDom m -> m ([Mutation], Int, VirtualDom m)
+buildHtml' :: (Monad m) => Html m -> Int -> VirtualDom m -> m ([Mutation], Int, [Update], VirtualDom m)
 buildHtml' html parentId vdom = do
   let i = _nextId vdom
       vdom' = vdom {_nextId = _nextId vdom + 1}
-  (mutations, node, vdom'') <- case html of
+  (mutations, node, updates, vdom'') <- case html of
     HtmlComponent (DynComponent state content) -> do
-      (contentHtml, state') <- runComponent content i state
-      (ms, contentId, vdom2) <- buildHtml' contentHtml i vdom'
-      return (ms, ComponentNode (DynComponent state' content) contentId, vdom2)
+      ((contentHtml, state'), updates) <- runScope (runComponent content i state) i
+      (ms, contentId, updates2, vdom2) <- buildHtml' contentHtml i vdom'
+      return (ms, ComponentNode (DynComponent state' content) contentId, updates ++ updates2, vdom2)
     Fragment content -> do
-      (ms, contentIds, vdom2) <- buildChildren content i vdom'
-      return (ms, FragmentNode contentIds, vdom2)
+      (ms, contentIds, updates, vdom2) <- buildChildren content i vdom'
+      return (ms, FragmentNode contentIds, updates, vdom2)
     Element tag attrs content -> do
-      (ms, contentIds, vdom2) <- buildChildren content i vdom'
-      return (InsertElement parentId i tag : ms, ElementNode tag attrs contentIds, vdom2)
-    Text s -> pure ([InsertText parentId i s], TextNode s, vdom')
-  return (mutations, i, vdom'' {_tree = insert i node (_tree vdom'')})
+      (ms, contentIds, updates, vdom2) <- buildChildren content i vdom'
+      return (InsertElement parentId i tag : ms, ElementNode tag attrs contentIds, updates, vdom2)
+    Text s -> pure ([InsertText parentId i s], TextNode s, [], vdom')
+  return (mutations, i, updates, vdom'' {_tree = insert i node (_tree vdom'')})
 
 -- | Build the content of an HTML item.
-buildChildren :: (Foldable t, Monad m) => t (Html m) -> Int -> VirtualDom m -> m ([Mutation], [Int], VirtualDom m)
+buildChildren ::
+  (Foldable t, Monad m) =>
+  t (Html m) ->
+  Int ->
+  VirtualDom m ->
+  m ([Mutation], [Int], [Update], VirtualDom m)
 buildChildren content parentId vdom =
   foldM
-    ( \(mAcc, idAcc, vdomAcc) c -> do
-        (ms, i, vdomAcc') <- buildHtml' c parentId vdomAcc
-        return (mAcc ++ ms, idAcc ++ [i], vdomAcc')
+    ( \(mAcc, idAcc, updateAcc, vdomAcc) c -> do
+        (ms, i, updates, vdomAcc') <- buildHtml' c parentId vdomAcc
+        return (mAcc ++ ms, idAcc ++ [i], updateAcc ++ updates, vdomAcc')
     )
-    ([], [], vdom)
+    ([], [], [], vdom)
     content
 
-rebuildHtml :: (Monad m) => Int -> VirtualDom m -> m ([Mutation], VirtualDom m)
+rebuildHtml :: (Monad m) => Int -> VirtualDom m -> m ([Mutation], [Update], VirtualDom m)
 rebuildHtml i vdom = case _tree vdom ! i of
   ComponentNode (DynComponent state content) contentId -> do
     let contentNode = _tree vdom ! contentId
-    (contentHtml, state') <- runComponent content i state
+    ((contentHtml, state'), updates) <- runScope (runComponent content i state) i
     let vdom' = vdom {_tree = insert i (ComponentNode (DynComponent state' content) contentId) (_tree vdom)}
-    return $ rebuildHtml' contentId contentHtml contentNode vdom'
+        (ms, vdom'') = rebuildHtml' contentId contentHtml contentNode vdom'
+    return (ms, updates, vdom'')
   _ -> error ""
 
 rebuildHtml' :: Int -> Html m -> Node m -> VirtualDom m -> ([Mutation], VirtualDom m)
@@ -223,7 +229,7 @@ click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom
 
 stream :: (Monad m) => Html m -> ConduitT (Int, String) Mutation m ()
 stream html = do
-  (mutations, vdom) <- lift $ buildHtml html mkVirtualDom
+  (mutations, updates, vdom) <- lift $ buildHtml html mkVirtualDom
   mapM_ yield mutations
   stream' vdom
 
@@ -234,6 +240,6 @@ stream' vdom = do
     Nothing -> return ()
     Just (i, eventName) -> do
       vdom' <- lift $ handle i eventName vdom
-      (mutations, vdom'') <- lift $ rebuildHtml 0 vdom'
+      (mutations, updates, vdom'') <- lift $ rebuildHtml 0 vdom'
       mapM_ yield mutations
       stream' vdom''

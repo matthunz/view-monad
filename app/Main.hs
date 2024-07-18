@@ -29,11 +29,11 @@ app = component_ (Counter 0 memo) $ do
 
 main :: IO ()
 main = do
-  (ms, vdom) <- buildHtml app mkVirtualDom
+  (ms, updates, vdom) <- buildHtml app mkVirtualDom
   print ms
   print vdom
 
   let button = fromMaybe (error "TODO") $ find "button" (root vdom)
   vdom' <- click button
-  (mutations, vdom'') <- rebuildHtml 0 vdom'
+  (mutations, updates, vdom'') <- rebuildHtml 0 vdom'
   print mutations
