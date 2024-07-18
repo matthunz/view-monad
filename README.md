@@ -7,15 +7,15 @@ import Control.Lens
 import ViewMonad
 
 data Counter = Counter
-  { _counter :: Int,
+  { _counter :: State Int,
     _output :: Memo Int Int
   }
 
 makeLenses ''Counter
 
 app :: (Monad m) => Html m
-app = component_ (Counter 0 memo) $ do
-  (count, setCount) <- useState counter
+app = component_ (Counter mkState mkMemo) $ do
+  (count, setCount) <- useState counter 0
 
   count' <- useMemo output count $ \x -> pure $ x * 2
 

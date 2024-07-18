@@ -5,6 +5,9 @@ license:         BSD-3-Clause
 license-file:    LICENSE
 build-type:      Simple
 extra-doc-files: CHANGELOG.md
+synopsis: Declartive UI framework
+description:    A declarative user interface framework
+maintainer: matthunz2@gmail.com
 
 library
     exposed-modules:

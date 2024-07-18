@@ -9,11 +9,13 @@
 module Data.ViewMonad
   ( Component (..),
     DynComponent (..),
-    useState,
     Update (..),
     Scope (..),
+    State,
+    mkState,
+    useState,
     Memo,
-    memo,
+    mkMemo,
     useMemo,
   )
 where
@@ -22,6 +24,7 @@ import Control.Lens
 import Control.Monad (ap)
 import Data.Typeable
 
+-- | Update to the `VirtualDom`
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
 
 newtype Scope m a = Scope {runScope :: Int -> m (a, [Update])}
@@ -65,22 +68,30 @@ instance (Monad m) => Monad (Component m s) where
 data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
 
-useState :: (Monad m, Typeable s) => Lens' s a -> Component m s (a, a -> Scope m ())
-useState f =
+maybeLens :: Lens' (State a) a
+maybeLens f (State (Just x)) = State <$> Just <$> f x
+maybeLens _ (State Nothing) = error "TODO"
+
+data State a = State (Maybe a)
+
+mkState :: State a
+mkState = State Nothing
+
+useState :: (Monad m, Typeable s) => Lens' s (State a) -> a -> Component m s (a, a -> Scope m ())
+useState l val =
   Component
     ( \i state ->
-        pure
-          ( ( state ^. f,
-              (\new -> Scope (\_ -> pure ((), [Update i new f])))
-            ),
-            state
-          )
+        let (State cell) = state ^. l
+            setter = (\new -> Scope (\_ -> pure ((), [Update i new $ l . maybeLens])))
+         in pure $ case cell of
+              Just cached -> ((cached, setter), state)
+              Nothing -> ((val, setter), set l (State $ Just val) state)
     )
 
 data Memo d a = Memo (Maybe (d, a))
 
-memo :: Memo d a
-memo = Memo Nothing
+mkMemo :: Memo d a
+mkMemo = Memo Nothing
 
 useMemo ::
   (Eq d, Monad m, Typeable s) =>
