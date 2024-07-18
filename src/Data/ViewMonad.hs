@@ -17,8 +17,7 @@ where
 
 import Control.Lens
 import Control.Monad (ap)
-import Data.Dynamic (Dynamic, Typeable, fromDynamic, toDyn)
-import Data.Maybe (fromMaybe)
+import Data.Typeable
 
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
 

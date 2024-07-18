@@ -19,8 +19,6 @@ where
 
 import Data.Typeable
 import Data.ViewMonad
-import GHC.Stack (HasCallStack, callStack, getCallStack)
-import GHC.Stack.Types (SrcLoc)
 
 data HtmlAttributeValue = TextValue String | Handler (Scope ())
 
