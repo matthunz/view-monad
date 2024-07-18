@@ -27,14 +27,14 @@ app = component_ (Counter 0) $ do
 
 run :: VirtualDom IO -> IO (VirtualDom IO)
 run vdom = do
-  (_, vdom') <- buildHtml app vdom
+  (_, _, vdom') <- buildHtml app vdom
   loop 10000 vdom'
 
 loop :: Int -> VirtualDom IO -> IO (VirtualDom IO)
 loop 0 v = pure v
 loop n vdom = do
   vdom' <- handle 4 "onclick" vdom
-  (mutations, vdom'') <- rebuildHtml 0 vdom'
+  (mutations, _, vdom'') <- rebuildHtml 0 vdom'
   loop (n - 1) vdom''
 
 main :: IO ()

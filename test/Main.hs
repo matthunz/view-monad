@@ -34,8 +34,8 @@ main :: IO ()
 main = hspec $ do
   describe "Data.VirtualDom.rebuildHtml" $ do
     it "rebuilds a single text node" $ do
-      (_, vdom) <- buildHtml app mkVirtualDom
+      (_, _, vdom) <- buildHtml app mkVirtualDom
       let button = fromMaybe (error "TODO") $ find "button" (root vdom)
       vdom' <- click button
-      (mutations, _) <- rebuildHtml 0 vdom'
+      (mutations, _, _) <- rebuildHtml 0 vdom'
       mutations `shouldBe` [SetText 2 "-1"]

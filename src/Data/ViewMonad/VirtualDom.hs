@@ -28,7 +28,7 @@ where
 import Conduit
 import Control.Lens
 import Control.Monad (foldM)
-import Data.Foldable (foldr')
+import Data.Foldable (foldr', foldrM)
 import Data.IntMap (IntMap, adjust, insert, (!))
 import Data.List (findIndex)
 import Data.Maybe (fromMaybe, listToMaybe)
@@ -230,8 +230,9 @@ click (ElementHandle (NodeHandle i _ vdom)) = handle i "onclick" vdom
 stream :: (Monad m) => Html m -> ConduitT (Int, String) Mutation m ()
 stream html = do
   (mutations, updates, vdom) <- lift $ buildHtml html mkVirtualDom
+  let vdom' = foldr (\x acc -> update x acc) vdom updates
   mapM_ yield mutations
-  stream' vdom
+  stream' vdom'
 
 stream' :: (Monad m) => VirtualDom m -> ConduitT (Int, String) Mutation m ()
 stream' vdom = do
@@ -241,5 +242,6 @@ stream' vdom = do
     Just (i, eventName) -> do
       vdom' <- lift $ handle i eventName vdom
       (mutations, updates, vdom'') <- lift $ rebuildHtml 0 vdom'
+      let vdom''' = foldr (\x acc -> update x acc) vdom'' updates
       mapM_ yield mutations
-      stream' vdom''
+      stream' vdom'''

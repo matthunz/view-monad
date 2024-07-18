@@ -40,7 +40,7 @@ test-suite view-monad-test
     default-language: Haskell2010
     ghc-options:      -Wall
     build-depends:
-        base >=4 && <4.17.2.2,
+        base <5,
         view-monad,
         hspec,
         lens
