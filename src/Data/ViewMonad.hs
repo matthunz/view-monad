@@ -12,10 +12,10 @@ module Data.ViewMonad
     liftScope,
     Update (..),
     Scope (..),
-    State,
+    UseState,
     mkState,
     useState,
-    Memo,
+    UseMemo,
     mkMemo,
     useMemo,
     View,
@@ -95,34 +95,34 @@ liftScope s =
           )
     )
 
-maybeLens :: Lens' (State a) a
-maybeLens f (State (Just x)) = State . Just <$> f x
-maybeLens _ (State Nothing) = error "TODO"
+maybeLens :: Lens' (UseState a) a
+maybeLens f (UseState (Just x)) = UseState . Just <$> f x
+maybeLens _ (UseState Nothing) = error "TODO"
 
-newtype State a = State (Maybe a)
+newtype UseState a = UseState (Maybe a)
 
-mkState :: State a
-mkState = State Nothing
+mkState :: UseState a
+mkState = UseState Nothing
 
-useState :: (Monad m, Typeable s) => Lens' s (State a) -> a -> Component m s (a, a -> Scope m ())
+useState :: (Monad m, Typeable s) => Lens' s (UseState a) -> a -> Component m s (a, a -> Scope m ())
 useState l val =
   Component
     ( \i state ->
-        let (State cell) = state ^. l
+        let (UseState cell) = state ^. l
             setter new = Scope (\_ -> pure ((), [Update i new $ l . maybeLens]))
          in pure $ case cell of
               Just cached -> ((cached, setter), state)
-              Nothing -> ((val, setter), set l (State $ Just val) state)
+              Nothing -> ((val, setter), set l (UseState $ Just val) state)
     )
 
-newtype Memo d a = Memo (Maybe (d, a))
+newtype UseMemo d a = UseMemo (Maybe (d, a))
 
-mkMemo :: Memo d a
-mkMemo = Memo Nothing
+mkMemo :: UseMemo d a
+mkMemo = UseMemo Nothing
 
 useMemo ::
   (Eq d, Monad m, Typeable s) =>
-  Lens' s (Memo d a) ->
+  Lens' s (UseMemo d a) ->
   d ->
   (d -> Scope m a) ->
   Component m s a
@@ -133,14 +133,14 @@ useMemo l dep f =
               Scope
                 ( \_ -> do
                     (a, updates) <- runScope (f dep) i
-                    return ((a, set l (Memo $ Just (dep, a)) state), updates)
+                    return ((a, set l (UseMemo $ Just (dep, a)) state), updates)
                 )
          in case state ^. l of
-              (Memo (Just (cachedDep, cached))) ->
+              (UseMemo (Just (cachedDep, cached))) ->
                 if cachedDep == dep
                   then pure (cached, state)
                   else runner
-              (Memo Nothing) -> runner
+              (UseMemo Nothing) -> runner
     )
 
 data View m where

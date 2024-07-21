@@ -7,19 +7,21 @@ import Control.Monad.IO.Class (MonadIO, liftIO)
 import ViewMonad
 
 data Counter = Counter
-  { _counter :: State Int,
-    _output :: Memo Int Int
+  { _countHook :: UseState Int,
+    _count'Hook :: UseMemo Int Int
   }
 
 makeLenses ''Counter
 
 app :: (MonadIO m) => View m
 app = componentV (Counter mkState mkMemo) $ do
-  (count, setCount) <- useState counter 0
+  (count, setCount) <- useState countHook 0
+
+  count' <- useMemo count'Hook count $ \c -> pure $ c * 2
 
   liftScope $ setCount (count + 1)
 
-  liftIO $ print count
+  liftIO $ print count'
 
   return []
 
