@@ -20,6 +20,7 @@ module Data.ViewMonad
     UseEffect,
     mkEffect,
     useEffect,
+    useUnmount,
     View,
     componentV,
     UserInterface,
@@ -64,19 +65,17 @@ instance (MonadIO m) => MonadIO (Scope m) where
 instance MonadTrans Scope where
   lift m = Scope (\_ -> do a <- m; pure (a, []))
 
-newtype Component s m a = Component
-  { runComponent :: Int -> s -> Scope m (a, s)
+data Component s m a = Component
+  { runComponent :: Int -> s -> Scope m (a, s),
+    removeComponent :: Int -> s -> Scope m ()
   }
   deriving (Functor)
-
-instance MonadTrans (Component s) where
-  lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, state), [])))
 
 instance Show (Component s m a) where
   show _ = "Component"
 
 instance (Monad m) => Applicative (Component s m) where
-  pure a = Component (\_ state -> pure (a, state))
+  pure a = Component (\_ state -> pure (a, state)) (\_ _ -> pure ())
   (<*>) = ap
 
 instance (Monad m) => Monad (Component s m) where
@@ -87,9 +86,15 @@ instance (Monad m) => Monad (Component s m) where
           (b, state'') <- runComponent (f a') i state'
           return (b, state'')
       )
+      ( \i state -> do
+          removeComponent a i state
+      )
 
 instance (MonadIO m) => MonadIO (Component s m) where
-  liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state))
+  liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state)) (\_ _ -> pure ())
+
+instance MonadTrans (Component s) where
+  lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, state), []))) (\_ _ -> pure ())
 
 maybeLens :: Lens' (UseState a) a
 maybeLens f (UseState (Just x)) = UseState . Just <$> f x
@@ -110,6 +115,7 @@ useState l val =
               Just cached -> ((cached, setter), state)
               Nothing -> ((val, setter), set l (UseState $ Just val) state)
     )
+    (\_ _ -> pure ())
 
 newtype UseMemo d a = UseMemo (Maybe (d, a))
 
@@ -138,6 +144,7 @@ useMemo l dep f =
                   else runner
               (UseMemo Nothing) -> runner
     )
+    (\_ _ -> pure ())
 
 newtype UseEffect d = UseEffect (Maybe d)
 
@@ -166,6 +173,10 @@ useEffect l dep f =
                   else runner
               (UseEffect Nothing) -> runner
     )
+    (\_ _ -> pure ())
+
+useUnmount :: (Monad m) => Scope m () -> Component s m ()
+useUnmount f = Component (\_ s -> pure ((), s)) (\_ _ -> f)
 
 data View m where
   ComponentV :: (Typeable s) => s -> Component s m [View m] -> View m

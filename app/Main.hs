@@ -20,7 +20,9 @@ app = componentV (Counter mkState mkMemo mkEffect) $ do
 
   count' <- useMemo countHook' count $ \c -> pure $ c * 2
 
-  useEffect effectHook count $ \c -> setCount (c + 1)
+  useEffect effectHook count $ \c -> setCount $ c + 1
+
+  useUnmount . liftIO $ print "Unmounted!"
 
   liftIO $ print count'
 
