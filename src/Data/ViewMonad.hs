@@ -66,7 +66,7 @@ instance MonadTrans Scope where
   lift m = Scope (\_ -> do a <- m; pure (a, []))
 
 data Component s m a = Component
-  { runComponent :: Int -> s -> Scope m (a, s),
+  { runComponent' :: Int -> s -> Scope m (a, s),
     removeComponent :: Int -> s -> Scope m ()
   }
   deriving (Functor)
@@ -79,8 +79,8 @@ instance (Monad m) => Monad (Component s m) where
   (>>=) a f =
     Component
       ( \i state -> do
-          (a', state') <- runComponent a i state
-          (b, state'') <- runComponent (f a') i state'
+          (a', state') <- runComponent' a i state
+          (b, state'') <- runComponent' (f a') i state'
           return (b, state'')
       )
       ( \i state -> do
@@ -92,6 +92,10 @@ instance (MonadIO m) => MonadIO (Component s m) where
 
 instance MonadTrans (Component s) where
   lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, state), []))) (\_ _ -> pure ())
+
+-- | Run a `Component` and its inner `Scope`.
+runComponent :: (Functor m) => Component s m a -> Int -> s -> m (a, s, [Update])
+runComponent c i s = (\((a, s'), us) -> (a, s', us)) <$> runScope (runComponent' c i s) i
 
 maybeLens :: Lens' (UseState a) a
 maybeLens f (UseState (Just x)) = UseState . Just <$> f x
@@ -202,7 +206,7 @@ buildUI :: (Monad m) => View m -> UserInterface m -> m (Int, [Update], UserInter
 buildUI (ComponentV s c) ui = do
   let i = _nextId ui
       ui' = ui {_nextId = i + 1}
-  ((vs, s'), updates) <- runScope (runComponent c i s) i
+  (vs, s', updates) <- runComponent c i s
   (childIds, updates', ui'') <-
     foldM
       ( \(idAcc, updateAcc, uiAcc) v -> do
@@ -227,8 +231,7 @@ rebuildUI i ui = case IntMap.lookup i (_views ui) of
 rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (Int, [Update], UserInterface m)
 rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui = case cast lastS of
   Just s' -> do
-    let scope = runComponent c i s'
-    ((vs, s''), updates) <- runScope scope i
+    (vs, s'', updates) <- runComponent c i s'
     (childIds', updates', ui') <-
       foldM
         ( \(idAcc, updateAcc, uiAcc) (childId, v) -> do
