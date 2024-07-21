@@ -13,6 +13,23 @@ data Counter = Counter
 
 makeLenses ''Counter
 
+app = componentV (Counter mkState mkMemo) $ do
+  (count, setCount) <- useState counter 0
+
+  return []
+
+main = do
+  _ <- buildUI app mkUI
+  return ()
+
+{-
+data Counter = Counter
+  { _counter :: State Int,
+    _output :: Memo Int Int
+  }
+
+makeLenses ''Counter
+
 app :: (Monad m) => Html m
 app = component_ (Counter mkState mkMemo) $ do
   (count, setCount) <- useState counter 0
@@ -42,3 +59,4 @@ main = do
   vdom''' <- click button'
   (mutations3, _, _) <- rebuildHtml 0 vdom'''
   print mutations3
+-}

@@ -17,11 +17,18 @@ module Data.ViewMonad
     Memo,
     mkMemo,
     useMemo,
+    View,
+    componentV,
+    UserInterface,
+    mkUI,
+    buildUI
   )
 where
 
 import Control.Lens
-import Control.Monad (ap)
+import Control.Monad (ap, foldM)
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Typeable
 
 -- | Update to the `VirtualDom`
@@ -127,3 +134,34 @@ runView (ComponentV s c) i = do
   let scope = runComponent c i s
   ((vs, s'), updates) <- runScope scope i
   return (ComponentV s' c, updates, vs)
+
+data ViewNode m = ViewNode (View m) [Int]
+
+data UserInterface m = UserInterface
+  { _views :: IntMap (ViewNode m),
+    _nextId :: Int
+  }
+
+mkUI :: UserInterface m
+mkUI = UserInterface mempty 0
+
+buildUI :: (Monad m) => View m -> UserInterface m -> m (UserInterface m, Int, [Update])
+buildUI (ComponentV s c) ui = do
+  let i = _nextId ui
+      ui' = ui {_nextId = i + 1}
+  ((vs, s'), updates) <- runScope (runComponent c i s) i
+  (childIds, updates', ui'') <-
+    foldM
+      ( \(idAcc, updateAcc, uiAcc) v -> do
+          (ui'', childId, updates2) <- buildUI v uiAcc
+          return (childId : idAcc, updateAcc ++ updates2, ui'')
+      )
+      ([], updates, ui')
+      vs
+  return
+    ( ui''
+        { _views = IntMap.insert (_nextId ui) (ViewNode (ComponentV s' c) childIds) (_views ui)
+        },
+      i,
+      updates'
+    )
