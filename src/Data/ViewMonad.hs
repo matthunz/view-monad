@@ -114,11 +114,14 @@ useState l val =
     )
     (\_ _ -> pure ())
 
+-- | Hook for `useMemo`.
 newtype UseMemo d a = UseMemo (Maybe (d, a))
 
+-- | Create a new `UseMemo`.
 mkMemo :: UseMemo d a
 mkMemo = UseMemo Nothing
 
+-- | Use a memoized value, only recomputing when the provided dependency is changed.
 useMemo ::
   (Eq d, Monad m, Typeable s) =>
   Lens' s (UseMemo d a) ->
@@ -143,11 +146,14 @@ useMemo l dep f =
     )
     (\_ _ -> pure ())
 
+-- | Hook for `useEffect`.
 newtype UseEffect d = UseEffect (Maybe d)
 
+-- | Create a new `UseEffect`.
 mkEffect :: UseEffect d
 mkEffect = UseEffect Nothing
 
+-- | Use an effect, only running when the provided dependency is changed.
 useEffect ::
   (Eq d, Monad m, Typeable s) =>
   Lens' s (UseEffect d) ->
@@ -172,6 +178,7 @@ useEffect l dep f =
     )
     (\_ _ -> pure ())
 
+-- | Use a computation that runs when this component is unmounted.
 useUnmount :: (Monad m) => Scope m () -> Component s m ()
 useUnmount f = Component (\_ s -> pure ((), s)) (\_ _ -> f)
 
