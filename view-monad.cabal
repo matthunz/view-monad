@@ -3,18 +3,16 @@ name:            view-monad
 version:         0.1.0.0
 license:         BSD-3-Clause
 license-file:    LICENSE
+maintainer:      matthunz2@gmail.com
+synopsis:        Declartive UI framework
+description:     A declarative user interface framework
 build-type:      Simple
 extra-doc-files: CHANGELOG.md
-synopsis: Declartive UI framework
-description:    A declarative user interface framework
-maintainer: matthunz2@gmail.com
 
 library
     exposed-modules:
         ViewMonad
         Data.ViewMonad
-        Data.ViewMonad.Html
-        Data.ViewMonad.VirtualDom
 
     hs-source-dirs:   src
     default-language: Haskell2010

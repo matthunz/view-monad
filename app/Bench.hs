@@ -7,6 +7,9 @@ import Criterion.Main
 import Data.Maybe (fromMaybe)
 import ViewMonad
 
+main = return ()
+
+{-
 data Counter = Counter
   { _counter :: State Int
   }
@@ -45,3 +48,6 @@ main =
         [ bench "5" $ whnf run mkVirtualDom
         ]
     ]
+
+-}
+

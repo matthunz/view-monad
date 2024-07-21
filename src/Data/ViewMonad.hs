@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 
 -- |
 -- Copyright   :  (c) Matt Hunzinger 2024
@@ -25,7 +25,7 @@ module Data.ViewMonad
     mkUI,
     buildUI,
     rebuildUI,
-    updateUI
+    updateUI,
   )
 where
 
@@ -34,8 +34,8 @@ import Control.Monad (ap, foldM)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
-import Data.Typeable
 import Data.Maybe (fromMaybe)
+import Data.Typeable
 
 -- | Update to the `VirtualDom`
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
