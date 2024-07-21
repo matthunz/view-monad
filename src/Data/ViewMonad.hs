@@ -10,7 +10,6 @@
 module Data.ViewMonad
   ( Component (..),
     liftScope,
-    DynComponent (..),
     Update (..),
     Scope (..),
     State,
@@ -96,14 +95,11 @@ liftScope s =
           )
     )
 
-data DynComponent m a where
-  DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
-
 maybeLens :: Lens' (State a) a
-maybeLens f (State (Just x)) = State <$> Just <$> f x
+maybeLens f (State (Just x)) = State . Just <$> f x
 maybeLens _ (State Nothing) = error "TODO"
 
-data State a = State (Maybe a)
+newtype State a = State (Maybe a)
 
 mkState :: State a
 mkState = State Nothing
@@ -113,13 +109,13 @@ useState l val =
   Component
     ( \i state ->
         let (State cell) = state ^. l
-            setter = (\new -> Scope (\_ -> pure ((), [Update i new $ l . maybeLens])))
+            setter new = Scope (\_ -> pure ((), [Update i new $ l . maybeLens]))
          in pure $ case cell of
               Just cached -> ((cached, setter), state)
               Nothing -> ((val, setter), set l (State $ Just val) state)
     )
 
-data Memo d a = Memo (Maybe (d, a))
+newtype Memo d a = Memo (Maybe (d, a))
 
 mkMemo :: Memo d a
 mkMemo = Memo Nothing
@@ -152,12 +148,6 @@ data View m where
 
 componentV :: (Typeable s) => s -> Component m s [View m] -> View m
 componentV = ComponentV
-
-runView :: (Monad m) => View m -> Int -> m (View m, [Update], [View m])
-runView (ComponentV s c) i = do
-  let scope = runComponent c i s
-  ((vs, s'), updates) <- runScope scope i
-  return (ComponentV s' c, updates, vs)
 
 data ViewNode m = ViewNode (View m) [Int]
 
@@ -226,7 +216,6 @@ updateUI (Update i val l) vdom =
                       content
                   )
                   childId
-              _ -> error ""
           )
           i
           (_views vdom)
