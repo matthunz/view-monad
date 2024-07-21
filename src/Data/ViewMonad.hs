@@ -31,13 +31,13 @@ module Data.ViewMonad
   )
 where
 
-import Control.Lens
+import Control.Lens (Lens', set, (^.))
 import Control.Monad (ap, foldM)
-import Control.Monad.Trans
+import Control.Monad.Trans (MonadIO (..), MonadTrans (..))
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Maybe (fromMaybe)
-import Data.Typeable
+import Data.Typeable (Typeable, cast)
 
 -- | Update to the `VirtualDom`
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
@@ -97,10 +97,6 @@ instance MonadTrans (Component s) where
 runComponent :: (Functor m) => Component s m a -> Int -> s -> m (a, s, [Update])
 runComponent c i s = (\((a, s'), us) -> (a, s', us)) <$> runScope (runComponent' c i s) i
 
-maybeLens :: Lens' (UseState a) a
-maybeLens f (UseState (Just x)) = UseState . Just <$> f x
-maybeLens _ (UseState Nothing) = error "TODO"
-
 newtype UseState a = UseState (Maybe a)
 
 mkState :: UseState a
@@ -108,15 +104,17 @@ mkState = UseState Nothing
 
 useState :: (Monad m, Typeable s) => Lens' s (UseState a) -> a -> Component s m (a, a -> Scope m ())
 useState l val =
-  Component
-    ( \i state ->
-        let (UseState cell) = state ^. l
-            setter new = Scope (\_ -> pure ((), [Update i new $ l . maybeLens]))
-         in pure $ case cell of
-              Just cached -> ((cached, setter), state)
-              Nothing -> ((val, setter), set l (UseState $ Just val) state)
-    )
-    (\_ _ -> pure ())
+  let maybeLens f (UseState (Just x)) = UseState . Just <$> f x
+      maybeLens _ (UseState Nothing) = error "TODO"
+   in Component
+        ( \i state ->
+            let (UseState cell) = state ^. l
+                setter new = Scope (\_ -> pure ((), [Update i new $ l . maybeLens]))
+             in pure $ case cell of
+                  Just cached -> ((cached, setter), state)
+                  Nothing -> ((val, setter), set l (UseState $ Just val) state)
+        )
+        (\_ _ -> pure ())
 
 -- | Hook for `useMemo`.
 newtype UseMemo d a = UseMemo (Maybe (d, a))
