@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Lens
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.Maybe (fromMaybe)
 import ViewMonad
 
@@ -13,11 +14,15 @@ data Counter = Counter
 
 makeLenses ''Counter
 
+app :: (MonadIO m) => View m
 app = componentV (Counter mkState mkMemo) $ do
   (count, setCount) <- useState counter 0
 
+  liftIO $ print count
+
   return []
 
+main :: IO ()
 main = do
   _ <- buildUI app mkUI
   return ()

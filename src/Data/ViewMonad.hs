@@ -30,6 +30,7 @@ import Control.Monad (ap, foldM)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Typeable
+import Control.Monad.IO.Class (MonadIO, liftIO)
 
 -- | Update to the `VirtualDom`
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
@@ -51,6 +52,9 @@ instance (Monad m) => Monad (Scope m) where
           return (b, updates1 ++ updates2)
       )
 
+instance MonadIO m => MonadIO (Scope m) where
+  liftIO io = Scope (\_ -> do a <- liftIO io; pure (a, []))
+
 newtype Component m s a = Component
   { runComponent :: Int -> s -> Scope m (a, s)
   }
@@ -71,6 +75,9 @@ instance (Monad m) => Monad (Component m s) where
           (b, state'') <- runComponent (f a') i state'
           return (b, state'')
       )
+
+instance MonadIO m => MonadIO (Component m s) where
+  liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state))
 
 data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a

@@ -23,7 +23,8 @@ library
         base <5,
         conduit,
         containers,
-        lens
+        lens,
+        mtl
 
 executable view-monad
     main-is:          Main.hs
