@@ -115,3 +115,15 @@ useMemo l dep f =
                   else runner
               (Memo Nothing) -> runner
     )
+
+data View m where
+  ComponentV :: s -> Component m s [View m] -> View m
+
+componentV :: s -> Component m s [View m] -> View m
+componentV = ComponentV
+
+runView :: (Monad m) => View m -> Int -> m (View m, [Update], [View m])
+runView (ComponentV s c) i = do
+  let scope = runComponent c i s
+  ((vs, s'), updates) <- runScope scope i
+  return (ComponentV s' c, updates, vs)
