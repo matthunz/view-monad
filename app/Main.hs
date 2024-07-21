@@ -25,9 +25,9 @@ app = componentV (Counter mkState mkMemo) $ do
 
 main :: IO ()
 main = do
-  (ui, _, updates) <- buildUI app mkUI
+  (_, updates, ui) <- buildUI app mkUI
   let ui' = foldr updateUI ui updates
-  (ui'', updates2) <- rebuildUI 0 ui'
+  (updates2, ui'') <- rebuildUI 0 ui'
   let ui''' = foldr updateUI ui'' updates2
   _ <- rebuildUI 0 ui'''
   return ()

@@ -159,7 +159,7 @@ data UserInterface m = UserInterface
 mkUI :: UserInterface m
 mkUI = UserInterface mempty 0
 
-buildUI :: (Monad m) => View m -> UserInterface m -> m (UserInterface m, Int, [Update])
+buildUI :: (Monad m) => View m -> UserInterface m -> m (Int, [Update], UserInterface m)
 buildUI (ComponentV s c) ui = do
   let i = _nextId ui
       ui' = ui {_nextId = i + 1}
@@ -167,25 +167,25 @@ buildUI (ComponentV s c) ui = do
   (childIds, updates', ui'') <-
     foldM
       ( \(idAcc, updateAcc, uiAcc) v -> do
-          (ui'', childId, updates2) <- buildUI v uiAcc
+          (childId, updates2, ui'') <- buildUI v uiAcc
           return (childId : idAcc, updateAcc ++ updates2, ui'')
       )
       ([], updates, ui')
       vs
   return
-    ( ui''
+    ( i,
+      updates',
+      ui''
         { _views = IntMap.insert (_nextId ui) (ViewNode (ComponentV s' c) childIds) (_views ui)
-        },
-      i,
-      updates'
+        }
     )
 
-rebuildUI :: (Monad m) => Int -> UserInterface m -> m (UserInterface m, [Update])
+rebuildUI :: (Monad m) => Int -> UserInterface m -> m ([Update], UserInterface m)
 rebuildUI i ui = case IntMap.lookup i (_views ui) of
   Just (ViewNode v childIds) -> rebuildView v (ViewNode v childIds) i ui
   Nothing -> error "TODO"
 
-rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (UserInterface m, [Update])
+rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m ([Update], UserInterface m)
 rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui = case cast lastS of
   Just s' -> do
     let scope = runComponent c i s'
@@ -193,17 +193,20 @@ rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui =
     (updates', ui') <-
       foldM
         ( \(updateAcc, uiAcc) (childId, v) -> do
-            (uiAcc', updates2) <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
+            (updates2, uiAcc') <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
             return (updateAcc ++ updates2, uiAcc')
         )
         (updates, ui)
         (zip childIds vs)
-    return (ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds) (_views ui')}, updates')
+    return
+      ( updates',
+        ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds) (_views ui')}
+      )
   Nothing -> error ""
 
 updateUI :: Update -> UserInterface m -> UserInterface m
-updateUI (Update i val l) vdom =
-  vdom
+updateUI (Update i val l) ui =
+  ui
     { _views =
         IntMap.adjust
           ( \case
@@ -218,5 +221,5 @@ updateUI (Update i val l) vdom =
                   childId
           )
           i
-          (_views vdom)
+          (_views ui)
     }
