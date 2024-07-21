@@ -14,8 +14,8 @@ data Counter = Counter
 
 makeLenses ''Counter
 
-app :: (MonadIO m) => View m
-app = componentV (Counter mkState mkMemo mkEffect) $ do
+counter :: (MonadIO m) => View m
+counter = componentV (Counter mkState mkMemo mkEffect) $ do
   (count, setCount) <- useState countHook 0
 
   count' <- useMemo countHook' count $ \c -> pure $ c * 2
@@ -28,11 +28,14 @@ app = componentV (Counter mkState mkMemo mkEffect) $ do
 
   return []
 
+app :: (MonadIO m) => View m
+app = componentV () $ return [counter, counter]
+
 main :: IO ()
 main = do
-  (_, updates, ui) <- buildUI app mkUI
+  (i, updates, ui) <- buildUI app mkUI
   let ui' = foldr updateUI ui updates
-  (updates2, ui'') <- rebuildUI 0 ui'
+  (i', updates2, ui'') <- rebuildUI i ui'
   let ui''' = foldr updateUI ui'' updates2
-  _ <- rebuildUI 0 ui'''
+  _ <- rebuildUI i' ui'''
   return ()

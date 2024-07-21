@@ -71,9 +71,6 @@ data Component s m a = Component
   }
   deriving (Functor)
 
-instance Show (Component s m a) where
-  show _ = "Component"
-
 instance (Monad m) => Applicative (Component s m) where
   pure a = Component (\_ state -> pure (a, state)) (\_ _ -> pure ())
   (<*>) = ap
@@ -211,33 +208,37 @@ buildUI (ComponentV s c) ui = do
     ( i,
       updates',
       ui''
-        { _views = IntMap.insert (_nextId ui) (ViewNode (ComponentV s' c) childIds) (_views ui)
+        { _views = IntMap.insert i (ViewNode (ComponentV s' c) childIds) (_views ui'')
         }
     )
 
-rebuildUI :: (Monad m) => Int -> UserInterface m -> m ([Update], UserInterface m)
+rebuildUI :: (Monad m) => Int -> UserInterface m -> m (Int, [Update], UserInterface m)
 rebuildUI i ui = case IntMap.lookup i (_views ui) of
   Just (ViewNode v childIds) -> rebuildView v (ViewNode v childIds) i ui
   Nothing -> error "TODO"
 
-rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m ([Update], UserInterface m)
+rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (Int, [Update], UserInterface m)
 rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui = case cast lastS of
   Just s' -> do
     let scope = runComponent c i s'
     ((vs, s''), updates) <- runScope scope i
-    (updates', ui') <-
+    (childIds', updates', ui') <-
       foldM
-        ( \(updateAcc, uiAcc) (childId, v) -> do
-            (updates2, uiAcc') <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
-            return (updateAcc ++ updates2, uiAcc')
+        ( \(idAcc, updateAcc, uiAcc) (childId, v) -> do
+            (childId', updates2, uiAcc') <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
+            return (idAcc ++ [childId'], updateAcc ++ updates2, uiAcc')
         )
-        (updates, ui)
+        ([], updates, ui)
         (zip childIds vs)
     return
-      ( updates',
-        ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds) (_views ui')}
+      ( i,
+        updates',
+        ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds') (_views ui')}
       )
-  Nothing -> error ""
+  Nothing -> do
+    ((), updates) <- runScope (removeComponent lastC i lastS) i
+    (i', updates2, ui') <- buildUI (ComponentV s c) ui
+    return (i', updates ++ updates2, ui')
 
 updateUI :: Update -> UserInterface m -> UserInterface m
 updateUI (Update i val l) ui =
