@@ -9,7 +9,6 @@
 -- Maintainer  :  matthunz2@gmail.com
 module Data.ViewMonad
   ( Component (..),
-    liftScope,
     Update (..),
     Scope (..),
     UseState,
@@ -88,18 +87,6 @@ instance (Monad m) => Monad (Component s m) where
 
 instance (MonadIO m) => MonadIO (Component s m) where
   liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state))
-
--- TODO
-liftScope :: (Monad m) => Scope m a -> Component s m a
-liftScope s =
-  Component
-    ( \i state ->
-        Scope
-          ( \_ -> do
-              (a, updates) <- runScope s i
-              return ((a, state), updates)
-          )
-    )
 
 maybeLens :: Lens' (UseState a) a
 maybeLens f (UseState (Just x)) = UseState . Just <$> f x
