@@ -17,6 +17,9 @@ module Data.ViewMonad
     UseMemo,
     mkMemo,
     useMemo,
+    UseEffect,
+    mkEffect,
+    useEffect,
     View,
     componentV,
     UserInterface,
@@ -134,6 +137,34 @@ useMemo l dep f =
                   then pure (cached, state)
                   else runner
               (UseMemo Nothing) -> runner
+    )
+
+newtype UseEffect d = UseEffect (Maybe d)
+
+mkEffect :: UseEffect d
+mkEffect = UseEffect Nothing
+
+useEffect ::
+  (Eq d, Monad m, Typeable s) =>
+  Lens' s (UseEffect d) ->
+  d ->
+  (d -> Scope m ()) ->
+  Component s m ()
+useEffect l dep f =
+  Component
+    ( \i state ->
+        let runner =
+              Scope
+                ( \_ -> do
+                    (a, updates) <- runScope (f dep) i
+                    return ((a, set l (UseEffect $ Just dep) state), updates)
+                )
+         in case state ^. l of
+              (UseEffect (Just cached)) ->
+                if cached == dep
+                  then pure ((), state)
+                  else runner
+              (UseEffect Nothing) -> runner
     )
 
 data View m where

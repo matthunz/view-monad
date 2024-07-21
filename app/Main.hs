@@ -9,18 +9,18 @@ import ViewMonad
 data Counter = Counter
   { _countHook :: UseState Int,
     _countHook' :: UseMemo Int Int,
-    _effectHook :: UseMemo Int ()
+    _effectHook :: UseEffect Int
   }
 
 makeLenses ''Counter
 
 app :: (MonadIO m) => View m
-app = componentV (Counter mkState mkMemo mkMemo) $ do
+app = componentV (Counter mkState mkMemo mkEffect) $ do
   (count, setCount) <- useState countHook 0
 
   count' <- useMemo countHook' count $ \c -> pure $ c * 2
 
-  _ <- useMemo effectHook count $ \c -> setCount (c + 1)
+  useEffect effectHook count $ \c -> setCount (c + 1)
 
   liftIO $ print count'
 
