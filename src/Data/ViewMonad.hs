@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE LambdaCase #-}
 
 -- |
 -- Copyright   :  (c) Matt Hunzinger 2024
@@ -8,6 +9,7 @@
 -- Maintainer  :  matthunz2@gmail.com
 module Data.ViewMonad
   ( Component (..),
+    liftScope,
     DynComponent (..),
     Update (..),
     Scope (..),
@@ -21,16 +23,19 @@ module Data.ViewMonad
     componentV,
     UserInterface,
     mkUI,
-    buildUI
+    buildUI,
+    rebuildUI,
+    updateUI
   )
 where
 
 import Control.Lens
 import Control.Monad (ap, foldM)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Typeable
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.Maybe (fromMaybe)
 
 -- | Update to the `VirtualDom`
 data Update where Update :: (Typeable s) => Int -> !a -> !(Lens' s a) -> Update
@@ -52,7 +57,7 @@ instance (Monad m) => Monad (Scope m) where
           return (b, updates1 ++ updates2)
       )
 
-instance MonadIO m => MonadIO (Scope m) where
+instance (MonadIO m) => MonadIO (Scope m) where
   liftIO io = Scope (\_ -> do a <- liftIO io; pure (a, []))
 
 newtype Component m s a = Component
@@ -76,8 +81,20 @@ instance (Monad m) => Monad (Component m s) where
           return (b, state'')
       )
 
-instance MonadIO m => MonadIO (Component m s) where
+instance (MonadIO m) => MonadIO (Component m s) where
   liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state))
+
+-- TODO
+liftScope :: (Monad m) => Scope m a -> Component m s a
+liftScope s =
+  Component
+    ( \i state ->
+        Scope
+          ( \_ -> do
+              (a, updates) <- runScope s i
+              return ((a, state), updates)
+          )
+    )
 
 data DynComponent m a where
   DynComponent :: (Typeable s) => s -> Component m s a -> DynComponent m a
@@ -131,9 +148,9 @@ useMemo l dep f =
     )
 
 data View m where
-  ComponentV :: s -> Component m s [View m] -> View m
+  ComponentV :: (Typeable s) => s -> Component m s [View m] -> View m
 
-componentV :: s -> Component m s [View m] -> View m
+componentV :: (Typeable s) => s -> Component m s [View m] -> View m
 componentV = ComponentV
 
 runView :: (Monad m) => View m -> Int -> m (View m, [Update], [View m])
@@ -172,3 +189,45 @@ buildUI (ComponentV s c) ui = do
       i,
       updates'
     )
+
+rebuildUI :: (Monad m) => Int -> UserInterface m -> m (UserInterface m, [Update])
+rebuildUI i ui = case IntMap.lookup i (_views ui) of
+  Just (ViewNode v childIds) -> rebuildView v (ViewNode v childIds) i ui
+  Nothing -> error "TODO"
+
+rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (UserInterface m, [Update])
+rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui = case cast lastS of
+  Just s' -> do
+    let scope = runComponent c i s'
+    ((vs, s''), updates) <- runScope scope i
+    (updates', ui') <-
+      foldM
+        ( \(updateAcc, uiAcc) (childId, v) -> do
+            (uiAcc', updates2) <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
+            return (updateAcc ++ updates2, uiAcc')
+        )
+        (updates, ui)
+        (zip childIds vs)
+    return (ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds) (_views ui')}, updates')
+  Nothing -> error ""
+
+updateUI :: Update -> UserInterface m -> UserInterface m
+updateUI (Update i val l) vdom =
+  vdom
+    { _views =
+        IntMap.adjust
+          ( \case
+              ViewNode (ComponentV state content) childId ->
+                ViewNode
+                  ( ComponentV
+                      ( fromMaybe (error "TODO") $
+                          cast (set l val (fromMaybe (error "TODO") $ cast state))
+                      )
+                      content
+                  )
+                  childId
+              _ -> error ""
+          )
+          i
+          (_views vdom)
+    }
