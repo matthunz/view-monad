@@ -22,7 +22,8 @@ library
         conduit,
         containers,
         lens,
-        mtl
+        mtl,
+        transformers
 
 executable view-monad
     main-is:          Main.hs

@@ -30,7 +30,7 @@ where
 
 import Control.Lens
 import Control.Monad (ap, foldM)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Maybe (fromMaybe)
@@ -59,19 +59,25 @@ instance (Monad m) => Monad (Scope m) where
 instance (MonadIO m) => MonadIO (Scope m) where
   liftIO io = Scope (\_ -> do a <- liftIO io; pure (a, []))
 
-newtype Component m s a = Component
+instance MonadTrans Scope where
+  lift m = Scope (\_ -> do a <- m; pure (a, []))
+
+newtype Component s m a = Component
   { runComponent :: Int -> s -> Scope m (a, s)
   }
   deriving (Functor)
 
-instance Show (Component m s a) where
+instance MonadTrans (Component s) where
+  lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, state), [])))
+
+instance Show (Component s m a) where
   show _ = "Component"
 
-instance (Monad m) => Applicative (Component m s) where
+instance (Monad m) => Applicative (Component s m) where
   pure a = Component (\_ state -> pure (a, state))
   (<*>) = ap
 
-instance (Monad m) => Monad (Component m s) where
+instance (Monad m) => Monad (Component s m) where
   (>>=) a f =
     Component
       ( \i state -> do
@@ -80,11 +86,11 @@ instance (Monad m) => Monad (Component m s) where
           return (b, state'')
       )
 
-instance (MonadIO m) => MonadIO (Component m s) where
+instance (MonadIO m) => MonadIO (Component s m) where
   liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state))
 
 -- TODO
-liftScope :: (Monad m) => Scope m a -> Component m s a
+liftScope :: (Monad m) => Scope m a -> Component s m a
 liftScope s =
   Component
     ( \i state ->
@@ -104,7 +110,7 @@ newtype UseState a = UseState (Maybe a)
 mkState :: UseState a
 mkState = UseState Nothing
 
-useState :: (Monad m, Typeable s) => Lens' s (UseState a) -> a -> Component m s (a, a -> Scope m ())
+useState :: (Monad m, Typeable s) => Lens' s (UseState a) -> a -> Component s m (a, a -> Scope m ())
 useState l val =
   Component
     ( \i state ->
@@ -125,7 +131,7 @@ useMemo ::
   Lens' s (UseMemo d a) ->
   d ->
   (d -> Scope m a) ->
-  Component m s a
+  Component s m a
 useMemo l dep f =
   Component
     ( \i state ->
@@ -144,9 +150,9 @@ useMemo l dep f =
     )
 
 data View m where
-  ComponentV :: (Typeable s) => s -> Component m s [View m] -> View m
+  ComponentV :: (Typeable s) => s -> Component s m [View m] -> View m
 
-componentV :: (Typeable s) => s -> Component m s [View m] -> View m
+componentV :: (Typeable s) => s -> Component s m [View m] -> View m
 componentV = ComponentV
 
 data ViewNode m = ViewNode (View m) [Int]
