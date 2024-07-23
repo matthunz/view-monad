@@ -66,36 +66,38 @@ instance MonadTrans Scope where
   lift m = Scope (\_ -> do a <- m; pure (a, []))
 
 data Component s m a = Component
-  { runComponent' :: Int -> s -> Scope m (a, s),
+  { runComponent' :: Int -> s -> Scope m (a, [Scope m ()], s),
     removeComponent :: Int -> s -> Scope m ()
   }
   deriving (Functor)
 
 instance (Monad m) => Applicative (Component s m) where
-  pure a = Component (\_ state -> pure (a, state)) (\_ _ -> pure ())
+  pure a = Component (\_ state -> pure (a, [], state)) (\_ _ -> pure ())
   (<*>) = ap
 
 instance (Monad m) => Monad (Component s m) where
   (>>=) a f =
     Component
       ( \i state -> do
-          (a', state') <- runComponent' a i state
-          (b, state'') <- runComponent' (f a') i state'
-          return (b, state'')
+          (a', effs1, state') <- runComponent' a i state
+          (b, effs2, state'') <- runComponent' (f a') i state'
+          return (b, effs1 ++ effs2, state'')
       )
       ( \i state -> do
           removeComponent a i state
       )
 
 instance (MonadIO m) => MonadIO (Component s m) where
-  liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, state)) (\_ _ -> pure ())
+  liftIO io = Component (\_ state -> do a <- liftIO io; pure (a, [], state)) (\_ _ -> pure ())
 
 instance MonadTrans (Component s) where
-  lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, state), []))) (\_ _ -> pure ())
+  lift m = Component (\_ state -> Scope (\_ -> do a <- m; pure ((a, [], state), []))) (\_ _ -> pure ())
 
 -- | Run a `Component` and its inner `Scope`.
-runComponent :: (Functor m) => Component s m a -> Int -> s -> m (a, s, [Update])
-runComponent c i s = (\((a, s'), us) -> (a, s', us)) <$> runScope (runComponent' c i s) i
+runComponent :: (Monad m) => Component s m a -> Int -> s -> m (a, [Scope m ()], s, [Update])
+runComponent c i s = do
+  ((a, effs, b), c) <- runScope (runComponent' c i s) i
+  return (a, effs, b, c)
 
 newtype UseState a = UseState (Maybe a)
 
@@ -111,8 +113,8 @@ useState l val =
             let (UseState cell) = state ^. l
                 setter new = Scope (\_ -> pure ((), [Update i new $ l . maybeLens]))
              in pure $ case cell of
-                  Just cached -> ((cached, setter), state)
-                  Nothing -> ((val, setter), set l (UseState $ Just val) state)
+                  Just cached -> ((cached, setter), [], state)
+                  Nothing -> ((val, setter), [], set l (UseState $ Just val) state)
         )
         (\_ _ -> pure ())
 
@@ -137,12 +139,12 @@ useMemo l dep f =
               Scope
                 ( \_ -> do
                     (a, updates) <- runScope (f dep) i
-                    return ((a, set l (UseMemo $ Just (dep, a)) state), updates)
+                    return ((a, [], set l (UseMemo $ Just (dep, a)) state), updates)
                 )
          in case state ^. l of
               (UseMemo (Just (cachedDep, cached))) ->
                 if cachedDep == dep
-                  then pure (cached, state)
+                  then pure (cached, [], state)
                   else runner
               (UseMemo Nothing) -> runner
     )
@@ -168,21 +170,21 @@ useEffect l dep f =
         let runner =
               Scope
                 ( \_ -> do
-                    (a, updates) <- runScope (f dep) i
-                    return ((a, set l (UseEffect $ Just dep) state), updates)
+                    ((), updates) <- runScope (f dep) i
+                    return ((), Update i (UseEffect $ Just dep) l : updates)
                 )
          in case state ^. l of
               (UseEffect (Just cached)) ->
                 if cached == dep
-                  then pure ((), state)
-                  else runner
-              (UseEffect Nothing) -> runner
+                  then pure ((), [], state)
+                  else pure ((), [runner], state)
+              (UseEffect Nothing) -> pure ((), [runner], state)
     )
     (\_ _ -> pure ())
 
 -- | Use a computation that runs when this component is unmounted.
 useUnmount :: (Monad m) => Scope m () -> Component s m ()
-useUnmount f = Component (\_ s -> pure ((), s)) (\_ _ -> f)
+useUnmount f = Component (\_ s -> pure ((), [], s)) (\_ _ -> f)
 
 data View m where
   ComponentV :: (Typeable s) => s -> Component s m [View m] -> View m
@@ -200,53 +202,55 @@ data UserInterface m = UserInterface
 mkUI :: UserInterface m
 mkUI = UserInterface mempty 0
 
-buildUI :: (Monad m) => View m -> UserInterface m -> m (Int, [Update], UserInterface m)
+buildUI :: (Monad m) => View m -> UserInterface m -> m (Int, [Update], [Scope m ()], UserInterface m)
 buildUI (ComponentV s c) ui = do
   let i = _nextId ui
       ui' = ui {_nextId = i + 1}
-  (vs, s', updates) <- runComponent c i s
-  (childIds, updates', ui'') <-
+  (vs, effs, s', updates) <- runComponent c i s
+  (childIds, updates', effs', ui'') <-
     foldM
-      ( \(idAcc, updateAcc, uiAcc) v -> do
-          (childId, updates2, ui'') <- buildUI v uiAcc
-          return (childId : idAcc, updateAcc ++ updates2, ui'')
+      ( \(idAcc, updateAcc, effAcc, uiAcc) v -> do
+          (childId, updates2, effs2, ui'') <- buildUI v uiAcc
+          return (childId : idAcc, updateAcc ++ updates2, effAcc ++ effs2, ui'')
       )
-      ([], updates, ui')
+      ([], updates, effs, ui')
       vs
   return
     ( i,
       updates',
+      effs',
       ui''
         { _views = IntMap.insert i (ViewNode (ComponentV s' c) childIds) (_views ui'')
         }
     )
 
-rebuildUI :: (Monad m) => Int -> UserInterface m -> m (Int, [Update], UserInterface m)
+rebuildUI :: (Monad m) => Int -> UserInterface m -> m (Int, [Update], [Scope m ()], UserInterface m)
 rebuildUI i ui = case IntMap.lookup i (_views ui) of
   Just (ViewNode v childIds) -> rebuildView v (ViewNode v childIds) i ui
   Nothing -> error "TODO"
 
-rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (Int, [Update], UserInterface m)
+rebuildView :: (Monad m) => View m -> ViewNode m -> Int -> UserInterface m -> m (Int, [Update], [Scope m ()], UserInterface m)
 rebuildView (ComponentV s c) (ViewNode (ComponentV lastS lastC) childIds) i ui = case cast lastS of
   Just s' -> do
-    (vs, s'', updates) <- runComponent c i s'
-    (childIds', updates', ui') <-
+    (vs, effs, s'', updates) <- runComponent c i s'
+    (childIds', updates', effs', ui') <-
       foldM
-        ( \(idAcc, updateAcc, uiAcc) (childId, v) -> do
-            (childId', updates2, uiAcc') <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
-            return (idAcc ++ [childId'], updateAcc ++ updates2, uiAcc')
+        ( \(idAcc, updateAcc, effAcc, uiAcc) (childId, v) -> do
+            (childId', updates2, effs2, uiAcc') <- rebuildView v (_views uiAcc IntMap.! childId) childId uiAcc
+            return (idAcc ++ [childId'], updateAcc ++ updates2, effAcc ++ effs2, uiAcc')
         )
-        ([], updates, ui)
+        ([], updates, effs, ui)
         (zip childIds vs)
     return
       ( i,
         updates',
+        effs',
         ui' {_views = IntMap.insert i (ViewNode (ComponentV s'' c) childIds') (_views ui')}
       )
   Nothing -> do
     ((), updates) <- runScope (removeComponent lastC i lastS) i
-    (i', updates2, ui') <- buildUI (ComponentV s c) ui
-    return (i', updates ++ updates2, ui')
+    (i', updates2, effs, ui') <- buildUI (ComponentV s c) ui
+    return (i', updates ++ updates2, effs, ui')
 
 updateUI :: Update -> UserInterface m -> UserInterface m
 updateUI (Update i val l) ui =
