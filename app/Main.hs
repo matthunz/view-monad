@@ -37,9 +37,11 @@ main = do
   let ui2 = foldr updateUI ui1 updates
   effUpdates <- concat <$> mapM (\s -> snd <$> runScope s i) effs
   let ui3 = foldr updateUI ui2 effUpdates
+
   (i', updates2, effs2, ui4) <- rebuildUI i ui3
   let ui5 = foldr updateUI ui4 updates2
   effUpdates2 <- concat <$> mapM (\s -> snd <$> runScope s i) effs2
   let ui6 = foldr updateUI ui5 effUpdates2
+
   _ <- rebuildUI i' ui6
   return ()
